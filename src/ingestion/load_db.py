@@ -3,12 +3,48 @@
 import duckdb
 from loguru import logger
 
-from src.config import DB_PATH, PROCESSED_DIR, RAW_DIR, TARGET_GENDER, TARGET_MATCH_TYPES
+from pathlib import Path
+
+from src.config import (
+    DB_PATH,
+    LEAGUE_BY_EVENT,
+    PROCESSED_DIR,
+    RAW_DIR,
+    TARGET_GENDER,
+    TARGET_MATCH_TYPES,
+)
 
 
 def _match_type_filter_sql() -> str:
     """Build a SQL IN clause for target match types."""
     return "(" + ", ".join(f"'{t}'" for t in TARGET_MATCH_TYPES) + ")"
+
+
+def _league_case_sql() -> str:
+    """SQL CASE mapping event names to league codes (IPL, BBL, CPL, PSL, T20I)."""
+    whens = " ".join(f"WHEN event = '{e}' THEN '{c}'" for e, c in LEAGUE_BY_EVENT.items())
+    return (
+        f"CASE {whens} WHEN match_type = 'IPL' THEN 'IPL' "
+        "WHEN team_type = 'international' THEN 'T20I' "
+        "ELSE COALESCE(event, 'Other T20') END"
+    )
+
+
+def _source_sql(raw: str, table: str) -> str:
+    """Read a raw table from TIGZIG, plus the direct-Cricsheet copy when present.
+
+    Direct-Cricsheet rows whose match_id already exists in the TIGZIG export are
+    skipped so no match is counted twice.
+    """
+    tigzig = f"SELECT * FROM read_parquet('{raw}/{table}.parquet')"
+    extra = Path(raw) / f"cricsheet_{table}.parquet"
+    if not extra.exists():
+        return tigzig
+    return (
+        f"{tigzig} UNION ALL BY NAME "
+        f"SELECT * FROM read_parquet('{extra}') WHERE match_id NOT IN "
+        f"(SELECT match_id FROM read_parquet('{raw}/match_info.parquet'))"
+    )
 
 
 def create_database(db_path: str | None = None, raw_dir: str | None = None) -> None:
@@ -19,7 +55,7 @@ def create_database(db_path: str | None = None, raw_dir: str | None = None) -> N
 
     con = duckdb.connect(db)
 
-    # ── match_info (T20 + IPL, men's) ──────────────────────────────
+    # ── match_info (men's T20 leagues + T20I) ──────────────────────
     # Adds `date` and `league` so downstream SQL does not depend on raw naming.
     logger.info("Loading match_info...")
     con.execute(f"""
@@ -27,8 +63,8 @@ def create_database(db_path: str | None = None, raw_dir: str | None = None) -> N
         SELECT
             *,
             start_date AS date,
-            CASE WHEN match_type = 'IPL' THEN 'IPL' ELSE 'T20I' END AS league
-        FROM read_parquet('{raw}/match_info.parquet')
+            {_league_case_sql()} AS league
+        FROM ({_source_sql(raw, "match_info")})
         WHERE match_type IN {_match_type_filter_sql()}
           AND gender = '{TARGET_GENDER}'
     """)
@@ -69,8 +105,9 @@ def create_database(db_path: str | None = None, raw_dir: str | None = None) -> N
             CASE WHEN b.wicket_type = 'caught and bowled' THEN b.bowler
                  ELSE b.fielder_1 END AS fielder,
             b.fielder_2
-        FROM read_parquet('{raw}/ball_by_ball.parquet') b
+        FROM ({_source_sql(raw, "ball_by_ball")}) b
         INNER JOIN match_info m ON b.match_id = m.match_id
+        WHERE b.innings <= 2  -- innings 3+ are super overs
     """)
     ball_count = con.execute("SELECT count(*) FROM ball_by_ball").fetchone()[0]
     logger.info(f"  ball_by_ball: {ball_count:,} deliveries")
@@ -80,7 +117,7 @@ def create_database(db_path: str | None = None, raw_dir: str | None = None) -> N
     con.execute(f"""
         CREATE OR REPLACE TABLE match_players AS
         SELECT mp.*
-        FROM read_parquet('{raw}/match_players.parquet') mp
+        FROM ({_source_sql(raw, "match_players")}) mp
         INNER JOIN match_info m ON mp.match_id = m.match_id
     """)
     player_count = con.execute("SELECT count(*) FROM match_players").fetchone()[0]

@@ -1,4 +1,4 @@
-"""End-to-end Phase 1 pipeline: download → load → features."""
+"""End-to-end Phase 1 pipeline: download (TIGZIG + Cricsheet JSON) → load → features."""
 
 from loguru import logger
 
@@ -8,6 +8,7 @@ from src.features.bowling_matchup import compute_matchup_features, save_matchup_
 from src.features.fielding import compute_fielding_features, save_fielding_features
 from src.features.partnership import compute_partnership_features, save_partnership_features
 from src.features.team import compute_team_features, save_team_features
+from src.ingestion.cricsheet_json import ingest_cricsheet
 from src.ingestion.download import download_all
 from src.ingestion.load_db import create_database, print_summary
 
@@ -20,6 +21,7 @@ def run_phase1(skip_download: bool = False) -> None:
     if not skip_download:
         logger.info("Step 1: Downloading Cricsheet data...")
         download_all()
+        ingest_cricsheet()
     else:
         logger.info("Step 1: Skipping download (--skip-download)")
 

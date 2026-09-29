@@ -1,6 +1,6 @@
 # CricketMind 🏏
 
-Cricket analytics LLM — a hybrid ML + fine tuned model + RAG system for T20 cricket predictions. Currently covers the IPL and men's T20 internationals; BBL, CPL and PSL are planned (Phase 1.5).
+Cricket analytics LLM — a hybrid ML + fine tuned model + RAG system for T20 cricket predictions. Covers the IPL, BBL, CPL, PSL and men's T20 internationals.
 
 ## What It Does
 
@@ -38,12 +38,28 @@ User Question
 
 ## Data
 
-Built on [Cricsheet](https://cricsheet.org/) ball-by-ball data:
-- Source: TIGZIG's Parquet export of Cricsheet (11,078 matches, 5M+ deliveries across T20/IPL/ODI/Test)
-- Filtered to **men's T20 + IPL**: 4,801 matches, ~1.1M deliveries (1,243 IPL, 3,558 T20I)
-- The TIGZIG export has **no BBL, CPL or PSL** data; those need direct Cricsheet ingestion (Phase 1.5)
-- Player names are strings, not IDs, so two players sharing a name would be merged
-- Downloaded as Parquet files, stored in DuckDB
+Built on [Cricsheet](https://cricsheet.org/) ball-by-ball data, from two sources:
+
+- **TIGZIG Parquet export** of Cricsheet: IPL + men's T20 internationals
+- **Direct Cricsheet JSON** (`src/ingestion/cricsheet_json.py`): BBL, CPL, PSL, converted to the same raw layout. The parser was cross-checked against TIGZIG on all 1,243 IPL matches (deliveries, runs, extras, legal balls, wickets, fielders: zero mismatches)
+
+Filtered to men's T20 cricket, innings 1-2 only (super overs are dropped):
+
+| League | Matches | Seasons |
+|--------|--------:|---------|
+| T20I | 3,558 | 2005-2026 |
+| IPL | 1,243 | 2008-2026 |
+| BBL | 662 | 2011-2026 |
+| CPL | 442 | 2013-2026 |
+| PSL | 357 | 2016-2026 |
+
+6,262 matches, ~1.44M deliveries, stored in DuckDB.
+
+**Known limitations**
+- Player names are strings, not IDs, so two players sharing a name are merged (Cricsheet's JSON has a name→ID registry that could fix this)
+- Renamed franchises appear as separate teams (e.g. Royal Challengers Bangalore/Bengaluru)
+- T20I includes associate nations, which skews unadjusted team win rates
+- Women's cricket is out of scope
 
 ## Quick Start
 
@@ -54,7 +70,7 @@ cd cricketmind
 python3.12 -m venv .venv && source .venv/bin/activate
 pip install -e ".[all]"
 
-# Run Phase 1 pipeline (download data + compute features)
+# Run Phase 1 pipeline (download both sources + compute features)
 python -m src.pipeline
 
 # Run tests
@@ -70,7 +86,7 @@ cricketmind/
 │   ├── processed/           # Feature tables + DuckDB
 │   └── embeddings/          # Vector store data
 ├── src/
-│   ├── ingestion/           # Data download + DB loading
+│   ├── ingestion/           # TIGZIG download, Cricsheet JSON parser, DB loading
 │   ├── features/            # Feature engineering modules
 │   │   ├── batsman.py       # Batsman stats + ranking
 │   │   ├── bowler.py        # Bowler stats + phase splits
@@ -94,7 +110,7 @@ Python 3.11+ · DuckDB · XGBoost · Hugging Face (Transformers + PEFT) · Chrom
 ## Status
 
 - [x] Phase 1: Data foundation + feature engineering (IPL + T20I)
-- [ ] Phase 1.5: Direct Cricsheet ingestion (BBL, CPL, PSL)
+- [x] Phase 1.5: Direct Cricsheet ingestion (BBL, CPL, PSL)
 - [ ] Phase 2: ML models
 - [ ] Phase 3: LLM fine-tuning
 - [ ] Phase 4: RAG pipeline

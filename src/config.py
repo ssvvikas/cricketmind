@@ -26,10 +26,23 @@ CRICSHEET_TABLES = {
     "people": f"{CRICSHEET_BASE_URL}/people.parquet",
 }
 
-# Scope of the analysis.  The TIGZIG dataset contains IPL plus international
-# matches only (no BBL/CPL/PSL) - see Phase 1.5 for direct Cricsheet ingestion.
+# ── Direct Cricsheet downloads (JSON zips) ────────────────────────
+# TIGZIG's export has no BBL/CPL/PSL, so those leagues come straight from
+# cricsheet.org and are converted to the same raw layout (see cricsheet_json.py).
+CRICSHEET_ZIP_URL = "https://cricsheet.org/downloads/{key}_json.zip"
+CRICSHEET_LEAGUES = ["bbl", "cpl", "psl"]
+
+# Scope of the analysis (men's T20 club leagues + T20 internationals).
 TARGET_MATCH_TYPES = ["T20", "IPL"]  # drops ODI / Test
 TARGET_GENDER = "male"
+
+# Cricsheet event name -> short league code used throughout the features.
+LEAGUE_BY_EVENT = {
+    "Indian Premier League": "IPL",
+    "Big Bash League": "BBL",
+    "Caribbean Premier League": "CPL",
+    "Pakistan Super League": "PSL",
+}
 
 
 class Settings(BaseSettings):
