@@ -12,6 +12,7 @@ from src.config import (
     RAW_DIR,
     TARGET_GENDER,
     TARGET_MATCH_TYPES,
+    TEAM_ALIASES,
 )
 
 
@@ -28,6 +29,17 @@ def _league_case_sql() -> str:
         "WHEN team_type = 'international' THEN 'T20I' "
         "ELSE COALESCE(event, 'Other T20') END"
     )
+
+
+def _canonical_team_sql(col: str, league_col: str = "league") -> str:
+    """SQL expression mapping renamed franchises in `col` to their canonical name."""
+    whens = " ".join(
+        f"WHEN {league_col} = '{lg}' AND {col} = '{old.replace(chr(39), chr(39) * 2)}' "
+        f"THEN '{new}'"
+        for lg, names in TEAM_ALIASES.items()
+        for old, new in names.items()
+    )
+    return f"CASE {whens} ELSE {col} END"
 
 
 def _source_sql(raw: str, table: str) -> str:
@@ -61,12 +73,21 @@ def create_database(db_path: str | None = None, raw_dir: str | None = None) -> N
     con.execute(f"""
         CREATE OR REPLACE TABLE match_info AS
         SELECT
-            *,
-            start_date AS date,
-            {_league_case_sql()} AS league
-        FROM ({_source_sql(raw, "match_info")})
-        WHERE match_type IN {_match_type_filter_sql()}
-          AND gender = '{TARGET_GENDER}'
+            * REPLACE (
+                {_canonical_team_sql("team1")} AS team1,
+                {_canonical_team_sql("team2")} AS team2,
+                {_canonical_team_sql("toss_winner")} AS toss_winner,
+                {_canonical_team_sql("winner")} AS winner
+            )
+        FROM (
+            SELECT
+                *,
+                start_date AS date,
+                {_league_case_sql()} AS league
+            FROM ({_source_sql(raw, "match_info")})
+            WHERE match_type IN {_match_type_filter_sql()}
+              AND gender = '{TARGET_GENDER}'
+        )
     """)
     match_count = con.execute("SELECT count(*) FROM match_info").fetchone()[0]
     logger.info(f"  match_info: {match_count:,} matches")
@@ -84,8 +105,8 @@ def create_database(db_path: str | None = None, raw_dir: str | None = None) -> N
             m.league,
             b.innings,
             b.over_no AS over_number,
-            b.batting_team,
-            b.bowling_team,
+            {_canonical_team_sql("b.batting_team", "m.league")} AS batting_team,
+            {_canonical_team_sql("b.bowling_team", "m.league")} AS bowling_team,
             b.striker AS batter,
             b.non_striker,
             b.bowler,
@@ -116,7 +137,7 @@ def create_database(db_path: str | None = None, raw_dir: str | None = None) -> N
     logger.info("Loading match_players...")
     con.execute(f"""
         CREATE OR REPLACE TABLE match_players AS
-        SELECT mp.*
+        SELECT mp.* REPLACE ({_canonical_team_sql("mp.team", "m.league")} AS team)
         FROM ({_source_sql(raw, "match_players")}) mp
         INNER JOIN match_info m ON mp.match_id = m.match_id
     """)

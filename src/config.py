@@ -44,6 +44,25 @@ LEAGUE_BY_EVENT = {
     "Pakistan Super League": "PSL",
 }
 
+# Same franchise under an older name -> canonical (current) name, keyed by league so
+# a name can never be renamed across leagues.  Deliberately NOT merged: Deccan Chargers
+# (not Sunrisers), Pune Warriors, and CPL Antigua Hawksbills vs Antigua and Barbuda
+# Falcons (different franchises).  Unverified: Jamaica Tallawahs -> Jamaica Kingsmen.
+TEAM_ALIASES = {
+    "IPL": {
+        "Royal Challengers Bangalore": "Royal Challengers Bengaluru",
+        "Kings XI Punjab": "Punjab Kings",
+        "Delhi Daredevils": "Delhi Capitals",
+        "Rising Pune Supergiants": "Rising Pune Supergiant",
+    },
+    "CPL": {
+        "St Lucia Zouks": "St Lucia Kings",
+        "St Lucia Stars": "St Lucia Kings",
+        "Barbados Tridents": "Barbados Royals",
+        "Trinidad & Tobago Red Steel": "Trinbago Knight Riders",
+    },
+}
+
 
 class Settings(BaseSettings):
     """Runtime settings — override with env vars or a .env file."""
