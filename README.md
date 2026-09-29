@@ -61,6 +61,32 @@ Filtered to men's T20 cricket, innings 1-2 only (super overs are dropped):
 - T20I includes associate nations, which skews unadjusted team win rates
 - Women's cricket is out of scope
 
+## Team-Strength Model (Phase 2, in progress)
+
+`python -m src.models.team_strength` trains an XGBoost classifier for P(team A beats team B)
+and writes the model, state and a metrics/SHAP report to `data/processed/models/`.
+
+- Features come strictly from earlier matches (Elo per league, recent form and scoring rate,
+  head-to-head, venue record, toss); a test suite checks that changing a result never alters
+  earlier features
+- Each match is scored from both teams' viewpoints and averaged, so team order can't bias it
+- Split by time: train ≤ 2023, validate 2024, test 2025-26
+
+| Test set (2025-26) | Matches | XGBoost acc / AUC | Elo-only acc / AUC |
+|---|---:|---|---|
+| T20I | 944 | 70.3% / 0.78 | 67.6% / 0.74 |
+| Club leagues (IPL, BBL, CPL, PSL) | 352 | 51.7% / 0.50 | 51.1% / 0.51 |
+
+**Honest reading:** the model is useful for internationals, where established nations face
+associates, but team-level history has **no measurable signal for club leagues** (confidence
+interval ±5% around a coin flip). Improving club predictions needs player-level features
+(who is actually in the XI), which is the next step.
+
+```python
+from src.models.team_strength import predict_match
+predict_match("India", "Australia", "T20I")
+```
+
 ## Quick Start
 
 ```bash
@@ -111,7 +137,7 @@ Python 3.11+ · DuckDB · XGBoost · Hugging Face (Transformers + PEFT) · Chrom
 
 - [x] Phase 1: Data foundation + feature engineering (IPL + T20I)
 - [x] Phase 1.5: Direct Cricsheet ingestion (BBL, CPL, PSL)
-- [ ] Phase 2: ML models
+- [ ] Phase 2: ML models (team-strength model done for T20I; club leagues need lineup features)
 - [ ] Phase 3: LLM fine-tuning
 - [ ] Phase 4: RAG pipeline
 - [ ] Phase 5: API + frontend
