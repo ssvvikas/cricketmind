@@ -42,7 +42,8 @@ MATCHES = [
 
 def _ball(match_id, innings, batting, bowling, i, batter, non_striker, bowler, **kw):
     row = {
-        "match_id": match_id, "season": "2024", "start_date": pd.Timestamp("2024-04-01"),
+        "match_id": match_id, "season": "2024",
+        "start_date": pd.Timestamp("2024-04-01") + pd.Timedelta(days=int(match_id)),
         "venue": "V", "innings": innings, "ball": float(i), "batting_team": batting,
         "bowling_team": bowling, "striker": batter, "non_striker": non_striker,
         "bowler": bowler, "runs_off_bat": 0, "extras": 0, "wides": None, "noballs": None,
@@ -85,7 +86,8 @@ def raw_and_db(tmp_path_factory):
     for mid, t1, t2, winner in MATCHES:
         info.append({
             "match_id": mid, "match_type": "IPL", "team1": t1, "team2": t2,
-            "gender": "male", "season": "2024", "start_date": pd.Timestamp("2024-04-01"),
+            "gender": "male", "season": "2024",
+            "start_date": pd.Timestamp("2024-04-01") + pd.Timedelta(days=mid),
             "venue": "V", "city": "C", "event": "Indian Premier League",
             "toss_winner": t1, "winner": winner, "team_type": "club",
         })
@@ -104,9 +106,13 @@ def raw_and_db(tmp_path_factory):
 
     pd.DataFrame(info).to_parquet(tmp / "match_info.parquet")
     pd.DataFrame(balls).to_parquet(tmp / "ball_by_ball.parquet")
-    pd.DataFrame({"match_id": [1], "person_name": ["p1"], "identifier": ["x"],
-                  "team": ["Team A"], "role": ["player"]}
-                 ).to_parquet(tmp / "match_players.parquet")
+    # rosters: team1 = p1, p2 ; team2 = p3, p4 (matches the ball-by-ball above)
+    pd.DataFrame([
+        {"match_id": mid, "person_name": name, "identifier": name, "team": team, "role": "player"}
+        for mid, t1, t2, _ in MATCHES
+        for team, names in ((t1, ["p1", "p2"]), (t2, ["p3", "p4"]))
+        for name in names
+    ]).to_parquet(tmp / "match_players.parquet")
     pd.DataFrame({"identifier": ["x"], "name": ["p1"]}).to_parquet(tmp / "people.parquet")
 
     db = str(tmp / "test.duckdb")
@@ -133,6 +139,13 @@ class TestLoader:
             "WHERE match_id = 1 AND innings = 1"
         ).fetchone()
         assert (legal, faced, total) == (24, 25, 26)  # wide not legal/faced; no-ball faced
+
+    def test_boolean_flags_are_never_null(self, db):
+        # NULL flags would silently break `NOT flag` filters (NULL IN (...) is NULL)
+        con = duckdb.connect(db, read_only=True)
+        for col in ("is_legal", "is_faced", "is_wicket", "is_bowler_wicket"):
+            nulls = con.execute(f"SELECT count(*) FROM ball_by_ball WHERE {col} IS NULL").fetchone()[0]
+            assert nulls == 0, col
 
     def test_league_column(self, db):
         con = duckdb.connect(db, read_only=True)

@@ -121,8 +121,8 @@ def create_database(db_path: str | None = None, raw_dir: str | None = None) -> N
             b.player_dismissed AS player_out,
             (b.wicket_type IS NOT NULL
                 AND b.wicket_type NOT IN ('retired hurt', 'retired not out')) AS is_wicket,
-            (b.wicket_type IN ('bowled', 'caught', 'caught and bowled', 'lbw',
-                               'stumped', 'hit wicket')) AS is_bowler_wicket,
+            COALESCE(b.wicket_type IN ('bowled', 'caught', 'caught and bowled', 'lbw',
+                                       'stumped', 'hit wicket'), FALSE) AS is_bowler_wicket,
             CASE WHEN b.wicket_type = 'caught and bowled' THEN b.bowler
                  ELSE b.fielder_1 END AS fielder,
             b.fielder_2

@@ -61,30 +61,46 @@ Filtered to men's T20 cricket, innings 1-2 only (super overs are dropped):
 - T20I includes associate nations, which skews unadjusted team win rates
 - Women's cricket is out of scope
 
-## Team-Strength Model (Phase 2, in progress)
+## Team-Strength Model (Phase 2)
 
 `python -m src.models.team_strength` trains an XGBoost classifier for P(team A beats team B)
-and writes the model, state and a metrics/SHAP report to `data/processed/models/`.
+and writes the model, state, calibration and a metrics/SHAP report to `data/processed/models/`.
 
-- Features come strictly from earlier matches (Elo per league, recent form and scoring rate,
-  head-to-head, venue record, toss); a test suite checks that changing a result never alters
-  earlier features
+**Features** (all computed only from earlier matches; all matches on one date are scored
+before any of that date's results are applied):
+- Team: Elo per league, recent form and scoring rate, head-to-head, venue record, toss
+- **Lineup:** the announced XI is rated from each player's earlier matches: batting runs above
+  par, bowling runs saved and wickets above par, weighted by workload and shrunk toward average
+  for small samples. Ratings are measured against the par of their era (rolling 400-match
+  window) and kept in separate club / international pools, because associate-nation players
+  look elite against weak opposition
 - Each match is scored from both teams' viewpoints and averaged, so team order can't bias it
-- Split by time: train ≤ 2023, validate 2024, test 2025-26
 
-| Test set (2025-26) | Matches | XGBoost acc / AUC | Elo-only acc / AUC |
-|---|---:|---|---|
-| T20I | 944 | 70.3% / 0.78 | 67.6% / 0.74 |
-| Club leagues (IPL, BBL, CPL, PSL) | 352 | 51.7% / 0.50 | 51.1% / 0.51 |
+**Evaluation:** expanding window, train on everything before year Y and test on Y for
+2021-2026, pooled, with bootstrap 95% intervals. Leakage tests flip a result (or edit a match's
+ball data) and check no earlier feature changes; they were verified to fail on a deliberate leak.
 
-**Honest reading:** the model is useful for internationals, where established nations face
-associates, but team-level history has **no measurable signal for club leagues** (confidence
-interval ±5% around a coin flip). Improving club predictions needs player-level features
-(who is actually in the XI), which is the next step.
+| Rolling test 2021-26 | Matches | Best model | Accuracy [95% CI] | Log loss (coin flip 0.693) |
+|---|---:|---|---|---|
+| T20I | 2,587 | XGBoost, team + lineup | 70.1% [68.4, 71.8] | 0.563 (Elo alone: 0.636) |
+| Club leagues | 1,105 | any | 50-53% [±3] | 0.69-0.70 (no better than a coin flip) |
+
+**Honest reading**
+- **Internationals:** useful. Lineup features improve on team-only features (log loss 0.572 to
+  0.563). A plain logistic regression does about as well as XGBoost
+- **Club leagues (IPL, BBL, CPL, PSL): no usable win prediction.** The lineup ratings are real:
+  a team's rating edge predicts the runs it scores with a slope of about 0.6 runs per point
+  (after removing league-year trends). But that edge moves the predicted match margin by only
+  ~4 runs against a match-to-match spread of ~43 runs, capping accuracy near 53%. Single T20
+  matches between club sides are mostly luck. Reported club probabilities are therefore
+  shrunk toward 50% (factor 0.15, fitted out of sample), so they stay honest
+- Team history is a poor guide in club cricket because squads turn over (only ~36% of an IPL
+  squad returns the next season; season-to-season win% correlation is 0.09)
 
 ```python
 from src.models.team_strength import predict_match
 predict_match("India", "Australia", "T20I")
+predict_match("Mumbai Indians", "Chennai Super Kings", "IPL", xi_a=[...])  # optional XI
 ```
 
 ## Quick Start
@@ -137,7 +153,7 @@ Python 3.11+ · DuckDB · XGBoost · Hugging Face (Transformers + PEFT) · Chrom
 
 - [x] Phase 1: Data foundation + feature engineering (IPL + T20I)
 - [x] Phase 1.5: Direct Cricsheet ingestion (BBL, CPL, PSL)
-- [ ] Phase 2: ML models (team-strength model done for T20I; club leagues need lineup features)
+- [ ] Phase 2: ML models (team-strength done: strong for T20I, ~coin flip for club leagues; batsman, fielding, partnership and bowling-strategy models remaining)
 - [ ] Phase 3: LLM fine-tuning
 - [ ] Phase 4: RAG pipeline
 - [ ] Phase 5: API + frontend
