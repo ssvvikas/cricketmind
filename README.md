@@ -1,6 +1,6 @@
 # CricketMind 🏏
 
-**Cricket analytics LLM** — a hybrid ML + fine-tuned model + RAG system for T20 cricket predictions. Currently covers the IPL and men's T20 internationals; BBL, CPL and PSL are planned (Phase 1.5).
+Cricket analytics LLM — a hybrid ML + fine tuned model + RAG system for T20 cricket predictions. Currently covers the IPL and men's T20 internationals; BBL, CPL and PSL are planned (Phase 1.5).
 
 ## What It Does
 
