@@ -1,0 +1,1 @@
+"""CricketMind — Cricket analytics LLM."""
