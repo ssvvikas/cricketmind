@@ -28,12 +28,11 @@ def compute_matchup_features(db_path: str | None = None) -> pd.DataFrame:
             ROUND(SUM(CASE WHEN b.runs_batter = 0 THEN 1 ELSE 0 END) * 100.0 / COUNT(*), 2)
                 AS dot_pct,
             SUM(CASE WHEN b.runs_batter >= 4 THEN 1 ELSE 0 END) AS boundaries,
-            SUM(CASE WHEN b.wicket_type IS NOT NULL
-                     AND b.player_out = b.batter
-                     AND b.wicket_type NOT IN ('run out', 'retired hurt', 'retired out')
+            SUM(CASE WHEN b.is_bowler_wicket AND b.player_out = b.batter
                  THEN 1 ELSE 0 END) AS times_dismissed,
             COUNT(DISTINCT b.match_id) AS encounters
         FROM ball_by_ball b
+        WHERE b.is_faced
         GROUP BY b.bowler, b.batter
         HAVING COUNT(*) >= 6
         ORDER BY times_dismissed DESC, dot_pct DESC

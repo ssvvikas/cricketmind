@@ -19,40 +19,41 @@ def compute_fielding_features(db_path: str | None = None) -> pd.DataFrame:
     logger.info("Computing fielding features...")
 
     df = con.execute("""
-        WITH dismissals AS (
+        WITH credits AS (
+            -- one row per fielder credited; run-outs can credit two fielders
+            SELECT match_id, over_number, wicket_type, fielder FROM ball_by_ball
+            WHERE fielder IS NOT NULL
+              AND wicket_type IN ('caught', 'caught and bowled', 'run out', 'stumped')
+            UNION ALL
+            SELECT match_id, over_number, wicket_type, fielder_2 FROM ball_by_ball
+            WHERE fielder_2 IS NOT NULL AND wicket_type = 'run out'
+        ),
+        dismissals AS (
             SELECT
-                b.match_id,
-                m.date,
-                m.event_name AS league,
-                b.fielder,
-                b.wicket_type,
-                b.bowler,
-                b.batter,
-                b.over_number,
+                match_id,
+                fielder,
+                wicket_type,
                 CASE
-                    WHEN b.over_number BETWEEN 0 AND 5 THEN 'powerplay'
-                    WHEN b.over_number BETWEEN 6 AND 14 THEN 'middle'
+                    WHEN over_number BETWEEN 0 AND 5 THEN 'powerplay'
+                    WHEN over_number BETWEEN 6 AND 14 THEN 'middle'
                     ELSE 'death'
                 END AS phase,
-                -- Proxy for fielding zone based on dismissal type
+                -- Proxy for fielding zone based on dismissal type + phase
                 CASE
-                    WHEN b.wicket_type = 'caught' AND b.fielder = b.bowler THEN 'caught_and_bowled'
-                    WHEN b.wicket_type = 'caught' AND b.over_number <= 5 THEN 'close_catching'
-                    WHEN b.wicket_type = 'caught' AND b.over_number >= 16 THEN 'boundary_catching'
-                    WHEN b.wicket_type = 'caught' THEN 'general_catching'
-                    WHEN b.wicket_type = 'run out' THEN 'run_out'
-                    WHEN b.wicket_type = 'stumped' THEN 'stumping'
+                    WHEN wicket_type = 'caught and bowled' THEN 'caught_and_bowled'
+                    WHEN wicket_type = 'caught' AND over_number <= 5 THEN 'close_catching'
+                    WHEN wicket_type = 'caught' AND over_number >= 16 THEN 'boundary_catching'
+                    WHEN wicket_type = 'caught' THEN 'general_catching'
+                    WHEN wicket_type = 'run out' THEN 'run_out'
+                    WHEN wicket_type = 'stumped' THEN 'stumping'
                     ELSE 'other'
                 END AS fielding_zone
-            FROM ball_by_ball b
-            JOIN match_info m ON b.match_id = m.match_id
-            WHERE b.fielder IS NOT NULL
-              AND b.wicket_type IN ('caught', 'run out', 'stumped')
+            FROM credits
         )
         SELECT
             fielder,
             COUNT(*) AS total_dismissals,
-            SUM(CASE WHEN wicket_type = 'caught' THEN 1 ELSE 0 END) AS catches,
+            SUM(CASE WHEN wicket_type IN ('caught', 'caught and bowled') THEN 1 ELSE 0 END) AS catches,
             SUM(CASE WHEN wicket_type = 'run out' THEN 1 ELSE 0 END) AS run_outs,
             SUM(CASE WHEN wicket_type = 'stumped' THEN 1 ELSE 0 END) AS stumpings,
             -- Zone breakdown

@@ -17,17 +17,17 @@ def compute_partnership_features(db_path: str | None = None) -> pd.DataFrame:
         WITH partnerships AS (
             -- Each ball has a batter and a non-striker (the current pair)
             SELECT
-                b.match_id,
-                m.date,
-                m.event_name AS league,
-                LEAST(b.batter, b.non_striker) AS player_a,
-                GREATEST(b.batter, b.non_striker) AS player_b,
-                b.runs_batter,
-                b.runs_extras,
-                b.innings,
-                CASE WHEN b.wicket_type IS NOT NULL THEN 1 ELSE 0 END AS wicket_fell
-            FROM ball_by_ball b
-            JOIN match_info m ON b.match_id = m.match_id
+                match_id,
+                date,
+                league,
+                LEAST(batter, non_striker) AS player_a,
+                GREATEST(batter, non_striker) AS player_b,
+                runs_batter,
+                runs_extras,
+                innings,
+                is_legal,
+                CASE WHEN is_wicket THEN 1 ELSE 0 END AS wicket_fell
+            FROM ball_by_ball
         ),
         pair_innings AS (
             -- Aggregate per partnership per innings
@@ -39,7 +39,7 @@ def compute_partnership_features(db_path: str | None = None) -> pd.DataFrame:
                 date,
                 league,
                 SUM(runs_batter + runs_extras) AS partnership_runs,
-                COUNT(*) AS balls_together,
+                SUM(is_legal::INT) AS balls_together,
                 SUM(CASE WHEN runs_batter >= 4 THEN 1 ELSE 0 END) AS boundaries,
                 SUM(CASE WHEN runs_batter IN (1, 3) THEN 1 ELSE 0 END) AS rotations,
                 MAX(wicket_fell) AS broken

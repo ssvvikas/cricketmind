@@ -26,14 +26,10 @@ CRICSHEET_TABLES = {
     "people": f"{CRICSHEET_BASE_URL}/people.parquet",
 }
 
-# Leagues we care about (used for filtering)
-TARGET_LEAGUES = [
-    "Indian Premier League",
-    "Big Bash League",
-    "Caribbean Premier League",
-    "Pakistan Super League",
-    "T20I",  # International T20s
-]
+# Scope of the analysis.  The TIGZIG dataset contains IPL plus international
+# matches only (no BBL/CPL/PSL) - see Phase 1.5 for direct Cricsheet ingestion.
+TARGET_MATCH_TYPES = ["T20", "IPL"]  # drops ODI / Test
+TARGET_GENDER = "male"
 
 
 class Settings(BaseSettings):

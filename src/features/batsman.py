@@ -27,22 +27,28 @@ def compute_batsman_features(
 
     # ── career stats ───────────────────────────────────────────────
     career = con.execute("""
-        WITH innings AS (
+        WITH dismissals AS (
+            -- keyed on player_out so non-striker run-outs are credited too
+            SELECT DISTINCT match_id, innings, player_out AS batter
+            FROM ball_by_ball
+            WHERE is_wicket AND player_out IS NOT NULL
+        ),
+        innings AS (
             SELECT
                 b.batter,
                 b.match_id,
-                m.date,
-                m.event_name AS league,
+                b.innings,
                 SUM(b.runs_batter) AS runs,
                 COUNT(*) AS balls,
                 SUM(CASE WHEN b.runs_batter = 0 THEN 1 ELSE 0 END) AS dots,
                 SUM(CASE WHEN b.runs_batter = 4 THEN 1 ELSE 0 END) AS fours,
                 SUM(CASE WHEN b.runs_batter = 6 THEN 1 ELSE 0 END) AS sixes,
-                MAX(CASE WHEN b.wicket_type IS NOT NULL
-                         AND b.player_out = b.batter THEN 1 ELSE 0 END) AS dismissed
+                MAX(CASE WHEN d.batter IS NOT NULL THEN 1 ELSE 0 END) AS dismissed
             FROM ball_by_ball b
-            JOIN match_info m ON b.match_id = m.match_id
-            GROUP BY b.batter, b.match_id, m.date, m.event_name
+            LEFT JOIN dismissals d
+                ON d.match_id = b.match_id AND d.innings = b.innings AND d.batter = b.batter
+            WHERE b.is_faced
+            GROUP BY b.batter, b.match_id, b.innings
         )
         SELECT
             batter,
@@ -73,6 +79,7 @@ def compute_batsman_features(
             SUM(runs_batter) AS runs,
             COUNT(*) AS balls
         FROM ball_by_ball
+        WHERE is_faced
         GROUP BY batter, phase
     """).df()
 
@@ -80,6 +87,13 @@ def compute_batsman_features(
         index="batter",
         columns="phase",
         values=["runs", "balls"],
+        fill_value=0,
+    )
+    # always emit every phase/metric column, even if a phase has no data
+    phase_pivot = phase_pivot.reindex(
+        columns=pd.MultiIndex.from_product(
+            [["runs", "balls"], ["powerplay", "middle", "death"]]
+        ),
         fill_value=0,
     )
     phase_pivot.columns = [f"{col[0]}_{col[1]}" for col in phase_pivot.columns]
@@ -91,7 +105,7 @@ def compute_batsman_features(
         balls_col = f"balls_{p}"
         if runs_col in phase_pivot.columns and balls_col in phase_pivot.columns:
             phase_pivot[f"sr_{p}"] = (
-                phase_pivot[runs_col] * 100 / phase_pivot[balls_col].replace(0, pd.NA)
+                phase_pivot[runs_col] * 100 / phase_pivot[balls_col].replace(0, float("nan"))
             ).round(2)
 
     # ── recent form (last N innings) ──────────────────────────────
@@ -100,6 +114,7 @@ def compute_batsman_features(
             SELECT
                 b.batter,
                 b.match_id,
+                b.innings,
                 SUM(b.runs_batter) AS runs,
                 COUNT(*) AS balls,
                 m.date,
@@ -108,7 +123,8 @@ def compute_batsman_features(
                 ) AS rn
             FROM ball_by_ball b
             JOIN match_info m ON b.match_id = m.match_id
-            GROUP BY b.batter, b.match_id, m.date
+            WHERE b.is_faced
+            GROUP BY b.batter, b.match_id, b.innings, m.date
         )
         SELECT
             batter,

@@ -17,7 +17,7 @@ def compute_team_features(db_path: str | None = None) -> pd.DataFrame:
         WITH team_matches AS (
             -- Expand each match into two rows (one per team)
             SELECT
-                match_id, date, event_name, venue,
+                match_id, date, league, venue,
                 team1 AS team,
                 team2 AS opponent,
                 CASE WHEN winner = team1 THEN 1 ELSE 0 END AS won,
@@ -26,7 +26,7 @@ def compute_team_features(db_path: str | None = None) -> pd.DataFrame:
             WHERE winner IS NOT NULL
             UNION ALL
             SELECT
-                match_id, date, event_name, venue,
+                match_id, date, league, venue,
                 team2 AS team,
                 team1 AS opponent,
                 CASE WHEN winner = team2 THEN 1 ELSE 0 END AS won,
@@ -35,34 +35,28 @@ def compute_team_features(db_path: str | None = None) -> pd.DataFrame:
             WHERE winner IS NOT NULL
         ),
         team_batting AS (
-            -- Aggregate batting stats per team per match
             SELECT
-                b.match_id,
-                mp.team,
-                SUM(b.runs_batter) AS team_runs,
-                COUNT(*) AS team_balls,
-                SUM(CASE WHEN b.runs_batter >= 4 THEN 1 ELSE 0 END) AS boundaries,
-                SUM(CASE WHEN b.runs_batter = 0 THEN 1 ELSE 0 END) AS dots
-            FROM ball_by_ball b
-            JOIN match_players mp ON b.match_id = mp.match_id AND b.batter = mp.player_id
-            GROUP BY b.match_id, mp.team
+                match_id,
+                batting_team AS team,
+                SUM(runs_batter + runs_extras) AS team_runs,
+                SUM(is_legal::INT) AS team_balls,
+                SUM(CASE WHEN runs_batter >= 4 THEN 1 ELSE 0 END) AS boundaries
+            FROM ball_by_ball
+            GROUP BY match_id, batting_team
         ),
         team_bowling AS (
             SELECT
-                b.match_id,
-                mp.team AS bowling_team,
-                SUM(CASE WHEN b.wicket_type IS NOT NULL
-                         AND b.wicket_type NOT IN ('run out', 'retired hurt', 'retired out')
-                     THEN 1 ELSE 0 END) AS wickets_taken,
-                SUM(b.runs_batter + b.runs_extras) AS runs_conceded,
-                COUNT(*) AS balls_bowled
-            FROM ball_by_ball b
-            JOIN match_players mp ON b.match_id = mp.match_id AND b.bowler = mp.player_id
-            GROUP BY b.match_id, mp.team
+                match_id,
+                bowling_team,
+                SUM(is_bowler_wicket::INT) AS wickets_taken,
+                SUM(bowler_runs) AS runs_conceded,
+                SUM(is_legal::INT) AS balls_bowled
+            FROM ball_by_ball
+            GROUP BY match_id, bowling_team
         )
         SELECT
             tm.team,
-            tm.event_name AS league,
+            tm.league,
             COUNT(*) AS matches,
             SUM(tm.won) AS wins,
             ROUND(SUM(tm.won) * 100.0 / COUNT(*), 2) AS win_pct,
@@ -76,7 +70,7 @@ def compute_team_features(db_path: str | None = None) -> pd.DataFrame:
         FROM team_matches tm
         LEFT JOIN team_batting tb ON tm.match_id = tb.match_id AND tm.team = tb.team
         LEFT JOIN team_bowling tbo ON tm.match_id = tbo.match_id AND tm.team = tbo.bowling_team
-        GROUP BY tm.team, tm.event_name
+        GROUP BY tm.team, tm.league
         HAVING COUNT(*) >= 5
         ORDER BY win_pct DESC
     """).df()
@@ -92,17 +86,17 @@ def compute_head_to_head(
     """Head-to-head record between two teams."""
     con = duckdb.connect(db_path or str(DB_PATH), read_only=True)
 
-    df = con.execute(f"""
+    df = con.execute("""
         SELECT
-            date, venue, event_name AS league, winner,
-            CASE WHEN winner = '{team_a}' THEN '{team_a}'
-                 WHEN winner = '{team_b}' THEN '{team_b}'
+            date, venue, league, winner,
+            CASE WHEN winner = $a THEN $a
+                 WHEN winner = $b THEN $b
                  ELSE 'no result' END AS result
         FROM match_info
-        WHERE (team1 = '{team_a}' AND team2 = '{team_b}')
-           OR (team1 = '{team_b}' AND team2 = '{team_a}')
+        WHERE (team1 = $a AND team2 = $b)
+           OR (team1 = $b AND team2 = $a)
         ORDER BY date DESC
-    """).df()
+    """, {"a": team_a, "b": team_b}).df()
 
     con.close()
     return df

@@ -1,6 +1,6 @@
 # CricketMind 🏏
 
-**Cricket analytics LLM** — a hybrid ML + fine-tuned model + RAG system for T20 cricket predictions across IPL, BBL, CPL, PSL, and international T20s.
+**Cricket analytics LLM** — a hybrid ML + fine-tuned model + RAG system for T20 cricket predictions. Currently covers the IPL and men's T20 internationals; BBL, CPL and PSL are planned (Phase 1.5).
 
 ## What It Does
 
@@ -10,7 +10,7 @@ CricketMind answers five core questions about T20 cricket:
 |--------|----------|--------|
 | **Team Strength** | Which team is stronger head-to-head? | XGBoost classifier with SHAP explainability |
 | **Batsman Ranking** | Who's the best batsman in current form? | Composite scoring with weighted metrics |
-| **Fielding Analysis** | Who fields best in which zone? | K-Means clustering over zone-mapped dismissals |
+| **Fielding Analysis** | Who fields best, and how? | Dismissal-based fielding score (catches, run-outs, stumpings by phase). Cricsheet has no fielding positions, so true zone analysis isn't possible |
 | **Partnership** | Which batting pair works best together? | Chemistry score from complementary metrics |
 | **Bowling Strategy** | Which bowler to start against a batsman? | Vulnerability mapping (bowler strength vs batsman weakness) |
 
@@ -39,17 +39,19 @@ User Question
 ## Data
 
 Built on [Cricsheet](https://cricsheet.org/) ball-by-ball data:
-- 11,000+ matches, 5M+ deliveries from 2001 onward
-- Covers IPL, BBL, CPL, PSL, and international T20s
+- Source: TIGZIG's Parquet export of Cricsheet (11,078 matches, 5M+ deliveries across T20/IPL/ODI/Test)
+- Filtered to **men's T20 + IPL**: 4,801 matches, ~1.1M deliveries (1,243 IPL, 3,558 T20I)
+- The TIGZIG export has **no BBL, CPL or PSL** data; those need direct Cricsheet ingestion (Phase 1.5)
+- Player names are strings, not IDs, so two players sharing a name would be merged
 - Downloaded as Parquet files, stored in DuckDB
 
 ## Quick Start
 
 ```bash
 # Clone and install
-git clone https://github.com/YOUR_USERNAME/cricketmind.git
+git clone https://github.com/ssvvikas/cricketmind.git
 cd cricketmind
-python -m venv .venv && source .venv/bin/activate
+python3.12 -m venv .venv && source .venv/bin/activate
 pip install -e ".[all]"
 
 # Run Phase 1 pipeline (download data + compute features)
@@ -91,7 +93,8 @@ Python 3.11+ · DuckDB · XGBoost · Hugging Face (Transformers + PEFT) · Chrom
 
 ## Status
 
-- [x] Phase 1: Data foundation + feature engineering
+- [x] Phase 1: Data foundation + feature engineering (IPL + T20I)
+- [ ] Phase 1.5: Direct Cricsheet ingestion (BBL, CPL, PSL)
 - [ ] Phase 2: ML models
 - [ ] Phase 3: LLM fine-tuning
 - [ ] Phase 4: RAG pipeline

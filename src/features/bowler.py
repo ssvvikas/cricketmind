@@ -17,21 +17,16 @@ def compute_bowler_features(db_path: str | None = None) -> pd.DataFrame:
     career = con.execute("""
         WITH spells AS (
             SELECT
-                b.bowler,
-                b.match_id,
-                m.date,
-                m.event_name AS league,
-                COUNT(*) AS balls,
-                SUM(b.runs_batter + b.runs_extras) AS runs_conceded,
-                SUM(CASE WHEN b.wicket_type IS NOT NULL
-                         AND b.wicket_type NOT IN ('run out', 'retired hurt', 'retired out', 'obstructing the field')
-                     THEN 1 ELSE 0 END) AS wickets,
-                SUM(CASE WHEN b.runs_batter = 0 AND b.runs_extras = 0 THEN 1 ELSE 0 END) AS dots,
-                SUM(CASE WHEN b.runs_batter = 4 THEN 1 ELSE 0 END) AS fours_conceded,
-                SUM(CASE WHEN b.runs_batter = 6 THEN 1 ELSE 0 END) AS sixes_conceded
-            FROM ball_by_ball b
-            JOIN match_info m ON b.match_id = m.match_id
-            GROUP BY b.bowler, b.match_id, m.date, m.event_name
+                bowler,
+                match_id,
+                SUM(is_legal::INT) AS balls,
+                SUM(bowler_runs) AS runs_conceded,
+                SUM(is_bowler_wicket::INT) AS wickets,
+                SUM(CASE WHEN runs_batter = 0 AND runs_extras = 0 THEN 1 ELSE 0 END) AS dots,
+                SUM(CASE WHEN runs_batter = 4 THEN 1 ELSE 0 END) AS fours_conceded,
+                SUM(CASE WHEN runs_batter = 6 THEN 1 ELSE 0 END) AS sixes_conceded
+            FROM ball_by_ball
+            GROUP BY bowler, match_id
         )
         SELECT
             bowler,
@@ -59,11 +54,9 @@ def compute_bowler_features(db_path: str | None = None) -> pd.DataFrame:
                 WHEN over_number BETWEEN 6 AND 14 THEN 'middle'
                 ELSE 'death'
             END AS phase,
-            COUNT(*) AS balls,
-            SUM(runs_batter + runs_extras) AS runs_conceded,
-            SUM(CASE WHEN wicket_type IS NOT NULL
-                     AND wicket_type NOT IN ('run out', 'retired hurt', 'retired out')
-                 THEN 1 ELSE 0 END) AS wickets
+            SUM(is_legal::INT) AS balls,
+            SUM(bowler_runs) AS runs_conceded,
+            SUM(is_bowler_wicket::INT) AS wickets
         FROM ball_by_ball
         GROUP BY bowler, phase
     """).df()
@@ -74,6 +67,13 @@ def compute_bowler_features(db_path: str | None = None) -> pd.DataFrame:
         values=["balls", "runs_conceded", "wickets"],
         fill_value=0,
     )
+    # always emit every phase/metric column, even if a phase has no data
+    phase_pivot = phase_pivot.reindex(
+        columns=pd.MultiIndex.from_product(
+            [["balls", "runs_conceded", "wickets"], ["powerplay", "middle", "death"]]
+        ),
+        fill_value=0,
+    )
     phase_pivot.columns = [f"{col[0]}_{col[1]}" for col in phase_pivot.columns]
     phase_pivot = phase_pivot.reset_index()
 
@@ -82,7 +82,7 @@ def compute_bowler_features(db_path: str | None = None) -> pd.DataFrame:
         bl = f"balls_{p}"
         if rc in phase_pivot.columns and bl in phase_pivot.columns:
             phase_pivot[f"econ_{p}"] = (
-                phase_pivot[rc] * 6 / phase_pivot[bl].replace(0, pd.NA)
+                phase_pivot[rc] * 6 / phase_pivot[bl].replace(0, float("nan"))
             ).round(2)
 
     # ── recent form ───────────────────────────────────────────────
@@ -91,11 +91,9 @@ def compute_bowler_features(db_path: str | None = None) -> pd.DataFrame:
         WITH spells_ranked AS (
             SELECT
                 b.bowler, b.match_id,
-                COUNT(*) AS balls,
-                SUM(runs_batter + runs_extras) AS runs_conceded,
-                SUM(CASE WHEN wicket_type IS NOT NULL
-                         AND wicket_type NOT IN ('run out', 'retired hurt', 'retired out')
-                     THEN 1 ELSE 0 END) AS wickets,
+                SUM(b.is_legal::INT) AS balls,
+                SUM(b.bowler_runs) AS runs_conceded,
+                SUM(b.is_bowler_wicket::INT) AS wickets,
                 m.date,
                 ROW_NUMBER() OVER (PARTITION BY b.bowler ORDER BY m.date DESC, b.match_id DESC) AS rn
             FROM ball_by_ball b

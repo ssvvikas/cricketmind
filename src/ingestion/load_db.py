@@ -3,13 +3,12 @@
 import duckdb
 from loguru import logger
 
-from src.config import DB_PATH, PROCESSED_DIR, RAW_DIR, TARGET_LEAGUES
+from src.config import DB_PATH, PROCESSED_DIR, RAW_DIR, TARGET_GENDER, TARGET_MATCH_TYPES
 
 
-def _league_filter_sql() -> str:
-    """Build a SQL IN clause for target leagues."""
-    quoted = ", ".join(f"'{lg}'" for lg in TARGET_LEAGUES)
-    return f"({quoted})"
+def _match_type_filter_sql() -> str:
+    """Build a SQL IN clause for target match types."""
+    return "(" + ", ".join(f"'{t}'" for t in TARGET_MATCH_TYPES) + ")"
 
 
 def create_database(db_path: str | None = None, raw_dir: str | None = None) -> None:
@@ -20,23 +19,56 @@ def create_database(db_path: str | None = None, raw_dir: str | None = None) -> N
 
     con = duckdb.connect(db)
 
-    # ── match_info (filtered to target leagues) ────────────────────
+    # ── match_info (T20 + IPL, men's) ──────────────────────────────
+    # Adds `date` and `league` so downstream SQL does not depend on raw naming.
     logger.info("Loading match_info...")
     con.execute(f"""
         CREATE OR REPLACE TABLE match_info AS
-        SELECT *
+        SELECT
+            *,
+            start_date AS date,
+            CASE WHEN match_type = 'IPL' THEN 'IPL' ELSE 'T20I' END AS league
         FROM read_parquet('{raw}/match_info.parquet')
-        WHERE event_name IN {_league_filter_sql()}
-           OR match_type = 'T20'
+        WHERE match_type IN {_match_type_filter_sql()}
+          AND gender = '{TARGET_GENDER}'
     """)
     match_count = con.execute("SELECT count(*) FROM match_info").fetchone()[0]
     logger.info(f"  match_info: {match_count:,} matches")
 
-    # ── ball_by_ball (only matches in our filtered set) ────────────
+    # ── ball_by_ball (normalised) ──────────────────────────────────
+    # wides/noballs are NULL when absent.  Legal ball = no wide, no no-ball;
+    # a batter faces every ball except wides; bowlers concede bat runs + wides
+    # + no-balls (not byes / leg-byes).
     logger.info("Loading ball_by_ball...")
     con.execute(f"""
         CREATE OR REPLACE TABLE ball_by_ball AS
-        SELECT b.*
+        SELECT
+            b.match_id,
+            m.date,
+            m.league,
+            b.innings,
+            b.over_no AS over_number,
+            b.batting_team,
+            b.bowling_team,
+            b.striker AS batter,
+            b.non_striker,
+            b.bowler,
+            b.runs_off_bat AS runs_batter,
+            b.extras AS runs_extras,
+            COALESCE(b.wides, 0) AS wides,
+            COALESCE(b.noballs, 0) AS noballs,
+            (COALESCE(b.wides, 0) = 0 AND COALESCE(b.noballs, 0) = 0) AS is_legal,
+            (COALESCE(b.wides, 0) = 0) AS is_faced,
+            b.runs_off_bat + COALESCE(b.wides, 0) + COALESCE(b.noballs, 0) AS bowler_runs,
+            b.wicket_type,
+            b.player_dismissed AS player_out,
+            (b.wicket_type IS NOT NULL
+                AND b.wicket_type NOT IN ('retired hurt', 'retired not out')) AS is_wicket,
+            (b.wicket_type IN ('bowled', 'caught', 'caught and bowled', 'lbw',
+                               'stumped', 'hit wicket')) AS is_bowler_wicket,
+            CASE WHEN b.wicket_type = 'caught and bowled' THEN b.bowler
+                 ELSE b.fielder_1 END AS fielder,
+            b.fielder_2
         FROM read_parquet('{raw}/ball_by_ball.parquet') b
         INNER JOIN match_info m ON b.match_id = m.match_id
     """)
