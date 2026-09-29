@@ -11,6 +11,7 @@ from src.features.team import compute_team_features, save_team_features
 from src.ingestion.cricsheet_json import ingest_cricsheet
 from src.ingestion.download import download_all
 from src.ingestion.load_db import create_database, print_summary
+from src.models.player_ratings import RatingBook, load_balls
 
 
 def run_phase1(skip_download: bool = False) -> None:
@@ -50,6 +51,10 @@ def run_phase1(skip_download: bool = False) -> None:
 
     matchup_df = compute_matchup_features()
     save_matchup_features(matchup_df)
+
+    # Step 4: era/phase-adjusted player ratings (the ranking used downstream)
+    logger.info("Step 4: Computing player ratings...")
+    RatingBook(load_balls()).save()
 
     logger.success("=== Phase 1 complete! ===")
     logger.info(f"  Batsmen:      {len(batsman_df):,}")

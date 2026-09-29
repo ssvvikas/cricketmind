@@ -44,6 +44,15 @@ LEAGUE_BY_EVENT = {
     "Pakistan Super League": "PSL",
 }
 
+# ICC Full Members.  Player ratings split internationals by opposition level: matches between
+# two Full Members form the "intl" pool, anything involving an associate the "assoc" pool
+# (associate-nation batters/bowlers look elite against weak opposition).  Afghanistan is a
+# Full Member but has no matches in Cricsheet at all.
+FULL_MEMBERS = {
+    "India", "Australia", "England", "South Africa", "New Zealand", "Pakistan", "Sri Lanka",
+    "Bangladesh", "West Indies", "Afghanistan", "Ireland", "Zimbabwe",
+}
+
 # Same franchise under an older name -> canonical (current) name, keyed by league so
 # a name can never be renamed across leagues.  Deliberately NOT merged: Deccan Chargers
 # (not Sunrisers), Pune Warriors, and CPL Antigua Hawksbills vs Antigua and Barbuda

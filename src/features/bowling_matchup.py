@@ -11,7 +11,7 @@ def compute_matchup_features(db_path: str | None = None) -> pd.DataFrame:
     """Compute bowler-vs-batsman matchup stats.
 
     For every bowler-batsman pair that has faced at least 6 balls,
-    compute runs, strike rate, dismissals, and a vulnerability score.
+    compute runs, strike rate and dismissals (descriptive only - see ``head_to_head``).
     """
     con = duckdb.connect(db_path or str(DB_PATH), read_only=True)
 
@@ -40,46 +40,33 @@ def compute_matchup_features(db_path: str | None = None) -> pd.DataFrame:
 
     con.close()
 
-    if not df.empty:
-        # Vulnerability score: how much trouble this bowler causes this batsman
-        # Higher = batsman struggles more against this bowler
-        df["vulnerability_score"] = (
-            0.30 * df["dot_pct"].rank(pct=True, na_option="bottom")
-            + 0.30 * (1 - df["strike_rate"].rank(pct=True, na_option="top"))
-            + 0.25 * df["times_dismissed"].rank(pct=True, na_option="bottom")
-            + 0.15 * (1 - df["boundaries"].rank(pct=True, na_option="top"))
-        ).round(4)
-
     logger.info(f"Matchup features computed for {len(df)} bowler-batsman pairs")
     return df
 
 
-def get_batsman_weaknesses(
-    batter: str, db_path: str | None = None, top_n: int = 5
-) -> pd.DataFrame:
-    """Find the bowlers who are most dangerous to a specific batsman."""
-    matchups = compute_matchup_features(db_path)
-    return (
-        matchups[matchups["batter"] == batter]
-        .sort_values("vulnerability_score", ascending=False)
-        .head(top_n)
-    )
+def head_to_head(batter: str, bowler: str, db_path: str | None = None) -> dict | None:
+    """The raw head-to-head record between one batter and one bowler (a fact, not a forecast).
 
-
-def recommend_bowler(
-    target_batter: str,
-    available_bowlers: list[str],
-    db_path: str | None = None,
-) -> pd.DataFrame:
-    """Given a target batsman and a list of available bowlers,
-    rank bowlers by how effective they are against that batsman.
+    Samples are small, and backtests showed a pair's own history predicts future balls *worse*
+    than league par.  For predictions use ``RatingBook.expected`` in
+    ``src.models.player_ratings``.
     """
     matchups = compute_matchup_features(db_path)
-    relevant = matchups[
-        (matchups["batter"] == target_batter)
-        & (matchups["bowler"].isin(available_bowlers))
-    ].sort_values("vulnerability_score", ascending=False)
-    return relevant
+    row = matchups[(matchups["batter"] == batter) & (matchups["bowler"] == bowler)]
+    if row.empty:
+        return None
+    rec = row.iloc[0].to_dict()
+    rec["small_sample"] = bool(rec["balls_faced"] < 30)
+    return rec
+
+
+def recommend_bowler(target_batter: str, available_bowlers: list[str], pool: str = "club",
+                     phase: str | None = None, book=None):
+    """Rank bowlers against a batter with the additive rating model (phase-aware)."""
+    from src.models.player_ratings import RatingBook, load_balls
+
+    book = book or RatingBook(load_balls())
+    return book.recommend_bowlers(target_batter, available_bowlers, pool, phase)
 
 
 def save_matchup_features(df: pd.DataFrame) -> None:

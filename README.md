@@ -9,10 +9,10 @@ CricketMind answers five core questions about T20 cricket:
 | Module | Question | Method |
 |--------|----------|--------|
 | **Team Strength** | Which team is stronger head-to-head? | XGBoost classifier with SHAP explainability |
-| **Batsman Ranking** | Who's the best batsman in current form? | Composite scoring with weighted metrics |
+| **Batsman Ranking** | Who's the best batsman in current form? | Era/phase-adjusted runs above par, shrunk and recency-weighted (backtested) |
 | **Fielding Analysis** | Who fields best, and how? | Dismissal-based fielding score (catches, run-outs, stumpings by phase). Cricsheet has no fielding positions, so true zone analysis isn't possible |
 | **Partnership** | Which batting pair works best together? | Chemistry score from complementary metrics |
-| **Bowling Strategy** | Which bowler to start against a batsman? | Vulnerability mapping (bowler strength vs batsman weakness) |
+| **Bowling Strategy** | Which bowler to start against a batsman? | Additive batter + bowler ratings by phase (head-to-head history tested and rejected) |
 
 ## Architecture
 
@@ -60,6 +60,8 @@ Filtered to men's T20 cricket, innings 1-2 only (super overs are dropped):
 - Renamed franchises appear as separate teams (e.g. Royal Challengers Bangalore/Bengaluru)
 - T20I includes associate nations, which skews unadjusted team win rates
 - Women's cricket is out of scope
+- **Afghanistan has no matches in Cricsheet** (any format), so it and its players are absent
+- Ratings are per name string, and a player rated in several pools has a separate rating in each
 
 ## Team-Strength Model (Phase 2)
 
@@ -103,6 +105,38 @@ predict_match("India", "Australia", "T20I")
 predict_match("Mumbai Indians", "Chennai Super Kings", "IPL", xi_a=[...])  # optional XI
 ```
 
+## Player Ratings, Rankings and Matchups (Phase 2)
+
+`src/models/player_ratings.py` (`python -m src.models.player_ratings`) rates every batter and
+bowler and answers matchup questions. Each ball is compared with the par for its
+(pool, year, phase), so a powerplay ball in 2025 isn't scored like a death-over ball in 2012.
+A rating is the shrunk (K = 150 balls), recency-weighted (2-year half-life) average of runs above
+par. Three pools keep contexts apart: `club` leagues, `intl` (two ICC Full Members) and `assoc`
+(any match involving an associate nation, where players look elite against weak opposition).
+
+```python
+from src.models.player_ratings import RatingBook, load_balls
+book = RatingBook(load_balls())
+book.rank_batters("club", top=10)
+book.recommend_bowlers("V Kohli", ["JJ Bumrah", "SP Narine"], pool="club", phase="powerplay")
+```
+
+**Backtests** (rate using data before a cut date, score on the next year; 2019-2025 cuts;
+Spearman rank correlation with next-year above-par performance):
+
+| Question | Result |
+|---|---|
+| Batting, club | New rating **0.30** vs Phase 1 composite 0.20 vs raw strike rate 0.23. Raw batting *average*: -0.03 (useless) |
+| Batting, Full-Member internationals | 0.34, no better than raw strike rate (0.36); small sample |
+| Bowling: runs saved | Predictable (0.25-0.41), but raw economy is as good as the adjusted rating |
+| Bowling: wickets | Barely persists (0.06-0.11): don't rank bowlers by wickets |
+| Matchups on future balls | Additive ratings beat par (+0.7% MSE); **adding head-to-head history made it worse** at every shrinkage tried, and raw head-to-head (Phase 1's approach) was 4.8% worse than par |
+
+So the adjusted ratings mainly buy comparability across eras and phases, not better rankings than
+raw strike rate or economy. The matchup model therefore uses no head-to-head history; raw
+head-to-head is exposed only as a fact (`head_to_head`). The Phase 1 `rank_score` (now
+`legacy_score`) and `vulnerability_score` were removed or demoted because of these results.
+
 ## Quick Start
 
 ```bash
@@ -135,7 +169,7 @@ cricketmind/
 │   │   ├── team.py          # Team strength + head-to-head
 │   │   ├── partnership.py   # Partnership chemistry scores
 │   │   ├── fielding.py      # Fielding zone analysis
-│   │   └── bowling_matchup.py  # Bowler-batsman vulnerability
+│   │   └── bowling_matchup.py  # Raw head-to-head facts (descriptive only)
 │   ├── models/              # ML model training (Phase 2)
 │   ├── llm/                 # LLM fine-tuning (Phase 3)
 │   ├── rag/                 # RAG pipeline (Phase 4)

@@ -142,9 +142,12 @@ def compute_batsman_features(
     df = career.merge(phase_pivot, on="batter", how="left")
     df = df.merge(recent, on="batter", how="left")
 
-    # ── composite ranking score ───────────────────────────────────
-    # Weighted combination — weights are tunable
-    df["rank_score"] = (
+    # ── legacy composite score ────────────────────────────────────
+    # Hand-weighted percentile blend.  Backtests showed it predicts next-year performance
+    # worse than raw strike rate (club Spearman 0.20 vs 0.23) and far worse than the
+    # era/phase-adjusted ratings in src/models/player_ratings.py, which should be used
+    # for ranking.  Kept only for reference.
+    df["legacy_score"] = (
         0.25 * df["strike_rate"].rank(pct=True, na_option="bottom")
         + 0.20 * df["average"].rank(pct=True, na_option="bottom")
         + 0.15 * (1 - df["consistency_std"].rank(pct=True, na_option="top"))
@@ -153,7 +156,7 @@ def compute_batsman_features(
         + 0.10 * df["recent_avg"].rank(pct=True, na_option="bottom")
     ).round(4)
 
-    df = df.sort_values("rank_score", ascending=False).reset_index(drop=True)
+    df = df.sort_values("legacy_score", ascending=False).reset_index(drop=True)
     df.index.name = "rank"
     df.index += 1
 

@@ -155,7 +155,7 @@ class TestLoader:
 class TestBatsmanFeatures:
     def test_required_columns(self, db):
         df = compute_batsman_features(db_path=db, recent_n=5)
-        for col in ["batter", "innings", "total_runs", "strike_rate", "average", "rank_score"]:
+        for col in ["batter", "innings", "total_runs", "strike_rate", "average", "legacy_score"]:
             assert col in df.columns
 
     def test_wide_not_counted_as_ball_faced(self, db):
@@ -174,9 +174,9 @@ class TestBatsmanFeatures:
         assert df.loc["p2", "times_out"] == N_MATCHES  # out at the non-striker end
         assert df.loc["p1", "times_out"] == N_MATCHES
 
-    def test_rank_score_between_0_and_1(self, db):
+    def test_legacy_score_between_0_and_1(self, db):
         df = compute_batsman_features(db_path=db, recent_n=5)
-        assert df["rank_score"].between(0, 1).all()
+        assert df["legacy_score"].between(0, 1).all()
 
 
 class TestBowlerFeatures:
@@ -250,5 +250,6 @@ class TestMatchupFeatures:
         p2 = df[(df.bowler == "p4") & (df.batter == "p2")]
         assert p2.empty or p2.iloc[0]["times_dismissed"] == 0  # run out is not the bowler's
 
-    def test_has_vulnerability_score(self, db):
-        assert "vulnerability_score" in compute_matchup_features(db_path=db).columns
+    def test_no_forecasting_score_is_attached(self, db):
+        # the old vulnerability score backtested worse than par, so it must stay removed
+        assert "vulnerability_score" not in compute_matchup_features(db_path=db).columns
