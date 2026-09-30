@@ -57,6 +57,10 @@ def head_to_head(batter: str, bowler: str, db_path: str | None = None) -> dict |
         return None
     rec = row.iloc[0].to_dict()
     rec["small_sample"] = bool(rec["balls_faced"] < 30)
+    # derived here so the assistant quotes them instead of doing the division itself
+    dis = rec["times_dismissed"]
+    rec["runs_per_dismissal"] = round(rec["runs_scored"] / dis, 1) if dis else None
+    rec["balls_per_dismissal"] = round(rec["balls_faced"] / dis, 1) if dis else None
     return rec
 
 

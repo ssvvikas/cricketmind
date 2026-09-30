@@ -293,6 +293,10 @@ def team_record(con, team: str, league=None, season=None, opponent=None) -> dict
         FROM ball_by_ball b WHERE b.match_id IN ({ids}) GROUP BY ALL""").df()
     mine = inn[inn["batting_team"] == team]
     first = mine[mine["innings"] == 1]
+    chase = mine[mine["innings"] == 2]
+    won_ids = set(df.loc[df["winner"] == team, "match_id"])
+    won_first = sum(1 for mid in first["match_id"] if mid in won_ids)
+    won_chase = sum(1 for mid in chase["match_id"] if mid in won_ids)
     out = {
         "team": team, "opponent": opponent or "all", "league": league or "all",
         "season": seasons or "all", "played": len(df), "won": won, "lost": lost,
@@ -300,9 +304,10 @@ def team_record(con, team: str, league=None, season=None, opponent=None) -> dict
         "win_percent": _r(won * 100 / (won + lost), 1) if (won + lost) else None,
         "avg_first_innings_score_when_batting_first": _r(first["runs"].mean(), 1)
         if len(first) else None,
-        "won_batting_first": int(sum(1 for mid in first["match_id"]
-                                     if df.loc[df.match_id == mid, "winner"].iloc[0] == team)),
-        "matches_batting_first": len(first),
+        "matches_batting_first": len(first), "won_batting_first": won_first,
+        "batting_first_win_percent": _r(won_first * 100 / len(first), 1) if len(first) else None,
+        "matches_chasing": len(chase), "won_chasing": won_chase,
+        "chasing_win_percent": _r(won_chase * 100 / len(chase), 1) if len(chase) else None,
         "toss_wins": int((df["toss_winner"] == team).sum()),
     }
     out["caveats"] = _caveats(league, [
@@ -373,6 +378,8 @@ def venue_stats(con, venue: str, league=None) -> dict:
         "lowest_total_full_innings": int(inn[inn["balls"] >= 114]["runs"].min())
         if (inn["balls"] >= 114).any() else None,
         "batting_first_win_percent": _r(bat_first_wins * 100 / len(decided), 1)
+        if len(decided) else None,
+        "chasing_win_percent": _r((len(decided) - bat_first_wins) * 100 / len(decided), 1)
         if len(decided) else None,
         "decided_matches": len(decided),
         "caveats": _caveats(league, [

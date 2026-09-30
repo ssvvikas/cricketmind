@@ -224,3 +224,23 @@ class TestPairs:
         assert "hitter" in {pairs.loc[0, "a"], pairs.loc[0, "b"]}
         assert "slow" in {pairs.iloc[-1]["a"], pairs.iloc[-1]["b"]}
         assert pairs["expected_runs_per_over"].is_monotonic_decreasing
+
+
+class TestDerivedFiguresAreSuppliedByTheTools:
+    """The assistant must not do its own arithmetic, so gaps come with the results."""
+
+    @pytest.fixture()
+    def book(self, league):
+        return RatingBook(league[0], as_of=league[1], halflife_years=None)
+
+    def test_recommendation_gaps_to_the_best_bowler(self, book):
+        rec = book.recommend_bowlers("hitter", ["leaky", "tight", "avg_bowl"], "club", "middle")
+        gap = rec["extra_runs_per_over_vs_best"]
+        assert gap.iloc[0] == 0.0 and gap.is_monotonic_increasing
+        assert gap.iloc[-1] == pytest.approx(
+            rec["expected_runs_per_over"].iloc[-1] - rec["expected_runs_per_over"].iloc[0], abs=0.01)
+
+    def test_pair_gaps_to_the_best_pair(self, book):
+        pairs = book.best_pairs(["hitter", "avg", "slow", "avg2"], "club", "middle")
+        gap = pairs["runs_per_over_below_best_pair"]
+        assert gap.iloc[0] == 0.0 and gap.is_monotonic_increasing

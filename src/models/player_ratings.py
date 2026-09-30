@@ -245,7 +245,11 @@ class RatingBook:
         rows = [self.expected(batter, bw, pool, phase) for bw in bowlers]
         df = pd.DataFrame(rows).sort_values(
             ["expected_runs_per_over", "dismissal_prob_per_ball"], ascending=[True, False])
-        return df.reset_index(drop=True)
+        df = df.reset_index(drop=True)
+        # the gap is computed here so the assistant can quote it rather than subtract itself
+        df["extra_runs_per_over_vs_best"] = (
+            df["expected_runs_per_over"] - df["expected_runs_per_over"].iloc[0]).round(2)
+        return df
 
     def pair_expectation(self, a: str, b: str, pool: str, phase: str | int | None = None) -> dict:
         """Expected batting output while two batters are together.
@@ -270,6 +274,8 @@ class RatingBook:
         rows = [self.pair_expectation(a, b, pool, phase) for a, b in combinations(batters, 2)]
         df = pd.DataFrame(rows).sort_values("expected_runs_per_over", ascending=False)
         df = df.reset_index(drop=True)
+        df["runs_per_over_below_best_pair"] = (
+            df["expected_runs_per_over"].iloc[0] - df["expected_runs_per_over"]).round(2)
         return df.head(top) if top else df
 
     def save(self, out_dir=None) -> None:

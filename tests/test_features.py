@@ -272,6 +272,14 @@ class TestMatchupFeatures:
         p2 = df[(df.bowler == "p4") & (df.batter == "p2")]
         assert p2.empty or p2.iloc[0]["times_dismissed"] == 0  # run out is not the bowler's
 
+    def test_head_to_head_supplies_runs_and_balls_per_dismissal(self, db):
+        from src.features.bowling_matchup import head_to_head
+
+        rec = head_to_head("p1", "p4", db_path=db)
+        # p1 scores 402 off 138 balls against p4 and is out to p4 twelve times (c&b + caught)
+        assert rec["times_dismissed"] == 12
+        assert rec["runs_per_dismissal"] == round(402 / 12, 1) and rec["balls_per_dismissal"] == 11.5
+
     def test_no_forecasting_score_is_attached(self, db):
         # the old vulnerability score backtested worse than par, so it must stay removed
         assert "vulnerability_score" not in compute_matchup_features(db_path=db).columns

@@ -165,6 +165,8 @@ Kohli's 973 runs at 81.08 in IPL 2016, Gill's 890 and Shami's 28 in 2023. Season
 source are inconsistent (IPL 2010 is stored as `2009/10`), so a plain year resolves to the edition
 that concluded that year.
 
+The tools do any arithmetic the assistant might want (gaps to the best bowler or pair, runs per dismissal, chasing win %, top X% of a pool), because the eval's grounding check can only verify figures a tool returned. Letting the check accept derived numbers was measured and rejected: it would have accepted 83% of random invented decimals.
+
 Honesty is built in: each result carries `caveats` (small samples, associate-nation pools,
 head-to-head not predictive, keeper-driven fielding numbers) and the system prompt tells the
 model to pass them on and to state nothing that a tool did not return.

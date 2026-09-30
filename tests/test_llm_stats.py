@@ -107,6 +107,14 @@ class TestTeams:
         assert t["avg_first_innings_score_when_batting_first"] == 72.0
         assert (t["matches_batting_first"], t["won_batting_first"], t["toss_wins"]) == (5, 3, 5)
 
+    def test_batting_first_and_chasing_splits(self, con):
+        b = S.team_record(con, "Team B", league="IPL")  # B chases m1, m2, m5 and bats first in m4
+        assert (b["matches_batting_first"], b["won_batting_first"],
+                b["batting_first_win_percent"]) == (1, 0, 0.0)
+        assert (b["matches_chasing"], b["won_chasing"], b["chasing_win_percent"]) == (3, 1, 33.3)
+        a = S.team_record(con, "Team A", league="IPL")  # A always bats first in the fixture
+        assert a["batting_first_win_percent"] == 60.0 and a["chasing_win_percent"] is None
+
     def test_head_to_head(self, con):
         h = S.team_record(con, "Team A", opponent="Team B")
         assert (h["played"], h["won"], h["lost"]) == (3, 2, 1) and h["opponent"] == "Team B"
@@ -130,6 +138,7 @@ class TestVenues:
             6, 72.0, 66.0)
         assert v["highest_total"] == 72 and v["decided_matches"] == 6
         assert v["batting_first_win_percent"] == 50.0  # 3 of 6 won by the side batting first
+        assert v["chasing_win_percent"] == 50.0
         assert v["lowest_total_full_innings"] is None  # fixture innings are far shorter
 
     def test_venue_search_is_a_contains_match_and_reports_what_it_matched(self, con):
