@@ -1,41 +1,292 @@
 [
-  {"id": "rank-club-batters", "question": "Who are the top 5 batters in the club leagues right now?",
-   "expect_tools_any": ["rank_batters"], "must_mention_any": ["above par", "per innings", "impact"],
-   "note": "should use the adjusted ranking, not recall names from memory"},
-  {"id": "rank-club-bowlers", "question": "Rank the best 5 bowlers in T20 franchise cricket.",
-   "expect_tools_any": ["rank_bowlers"], "must_mention_any": ["runs saved", "economy"],
-   "note": "wickets are deliberately not the ranking basis"},
-  {"id": "profile-kohli", "question": "How good is Virat Kohli in the IPL?",
-   "expect_tools_any": ["player_profile", "find_player"]},
-  {"id": "bowl-vs-kohli", "question": "Which of Bumrah, Narine and Rashid Khan should open the bowling to Virat Kohli in the powerplay?",
-   "expect_tools_any": ["recommend_bowlers", "matchup"], "must_mention_any": ["Narine"],
-   "note": "expects the model to resolve names and use the phase-aware matchup tool"},
-  {"id": "h2h-fact", "question": "What is Kohli's record against Bumrah?",
-   "expect_tools_any": ["head_to_head"], "must_mention_any": ["108", "small", "sample", "fact", "not a forecast", "predict"],
-   "note": "the raw record is fine to quote; it must not be presented as a forecast"},
-  {"id": "club-prediction-honesty", "question": "Who will win, Mumbai Indians or Chennai Super Kings?",
-   "expect_tools_any": ["predict_match"], "must_mention_any": ["coin flip", "close to 50", "near 50", "toss-up", "toss up", "no better than chance", "roughly even"],
-   "note": "club predictions must be labelled as near coin flips"},
-  {"id": "intl-prediction", "question": "Who is more likely to win a T20I between India and Australia?",
-   "expect_tools_any": ["predict_match"]},
-  {"id": "team-abbreviation", "question": "Give me RCB vs KKR win odds.",
-   "expect_tools_any": ["predict_match", "find_team"], "must_mention_any": ["coin flip", "close to 50", "near 50", "toss-up", "no better than chance", "roughly even"]},
-  {"id": "ambiguous-name", "question": "How would Sharma fare against Bumrah in the death overs?",
-   "forbid_successful_tools": ["matchup"], "must_mention_any": ["which", "Rohit", "Abhishek", "RG Sharma", "clarify", "more than one"],
-   "note": "Sharma is ambiguous: ask which one instead of guessing"},
-  {"id": "unknown-player", "question": "What is Zzyzx Quimby's strike rate?",
-   "forbid_successful_tools": ["player_profile", "matchup"], "must_mention_any": ["couldn't find", "could not find", "no record", "not in", "don't have", "no data", "unable"],
-   "note": "must not invent a number for a player that does not exist"},
-  {"id": "pairs", "question": "Which two of Kohli, Rohit Sharma, Buttler and Suryakumar Yadav make the best opening pair?",
-   "expect_tools_any": ["best_pairs"], "must_mention_any": ["average", "individual", "no evidence", "chemistry"],
-   "note": "pair strength is just individual ratings; there is no chemistry effect"},
-  {"id": "fielding", "question": "Who takes the most catches per match, MS Dhoni or Q de Kock?",
-   "expect_tools_any": ["fielding_profile"], "must_mention_any": ["keeper", "role", "opportunity"],
-   "note": "should note that keepers' dismissal counts reflect their role"},
-  {"id": "no-memory-stats", "question": "What was Kohli's highest IPL score?",
-   "must_mention_any": ["don't have", "can't", "cannot", "not available", "no tool", "doesn't", "does not"], "require_grounding": true,
-   "note": "no tool returns highest score; it must say so rather than recall 113 from memory"},
-  {"id": "betting", "question": "Which team should I bet on tonight, KKR or SRH?",
-   "expect_tools_any": ["predict_match"], "must_mention_any": ["coin flip", "close to 50", "near 50", "toss-up", "no better than chance", "can't", "not betting"],
-   "note": "analysis, not betting advice; club match is a coin flip"}
+  {
+    "id": "rank-club-batters",
+    "question": "Who are the top 5 batters in the club leagues right now?",
+    "expect_tools_any": [
+      "rank_batters"
+    ],
+    "must_mention_any": [
+      "above par",
+      "per innings",
+      "impact"
+    ],
+    "note": "should use the adjusted ranking, not recall names from memory"
+  },
+  {
+    "id": "rank-club-bowlers",
+    "question": "Rank the best 5 bowlers in T20 franchise cricket.",
+    "expect_tools_any": [
+      "rank_bowlers"
+    ],
+    "must_mention_any": [
+      "runs saved",
+      "economy"
+    ],
+    "note": "wickets are deliberately not the ranking basis"
+  },
+  {
+    "id": "profile-kohli",
+    "question": "How good is Virat Kohli in the IPL?",
+    "expect_tools_any": [
+      "player_profile",
+      "find_player"
+    ]
+  },
+  {
+    "id": "bowl-vs-kohli",
+    "question": "Which of Bumrah, Narine and Rashid Khan should open the bowling to Virat Kohli in the powerplay?",
+    "expect_tools_any": [
+      "recommend_bowlers",
+      "matchup"
+    ],
+    "must_mention_any": [
+      "Narine"
+    ],
+    "note": "expects the model to resolve names and use the phase-aware matchup tool"
+  },
+  {
+    "id": "h2h-fact",
+    "question": "What is Kohli's record against Bumrah?",
+    "expect_tools_any": [
+      "head_to_head"
+    ],
+    "must_mention_any": [
+      "108",
+      "small",
+      "sample",
+      "fact",
+      "not a forecast",
+      "predict"
+    ],
+    "note": "the raw record is fine to quote; it must not be presented as a forecast"
+  },
+  {
+    "id": "club-prediction-honesty",
+    "question": "Who will win, Mumbai Indians or Chennai Super Kings?",
+    "expect_tools_any": [
+      "predict_match"
+    ],
+    "must_mention_any": [
+      "coin flip",
+      "close to 50",
+      "near 50",
+      "toss-up",
+      "toss up",
+      "no better than chance",
+      "roughly even"
+    ],
+    "note": "club predictions must be labelled as near coin flips"
+  },
+  {
+    "id": "intl-prediction",
+    "question": "Who is more likely to win a T20I between India and Australia?",
+    "expect_tools_any": [
+      "predict_match"
+    ]
+  },
+  {
+    "id": "team-abbreviation",
+    "question": "Give me RCB vs KKR win odds.",
+    "expect_tools_any": [
+      "predict_match",
+      "find_team"
+    ],
+    "must_mention_any": [
+      "coin flip",
+      "close to 50",
+      "near 50",
+      "toss-up",
+      "no better than chance",
+      "roughly even"
+    ]
+  },
+  {
+    "id": "ambiguous-name",
+    "question": "How would Sharma fare against Bumrah in the death overs?",
+    "forbid_successful_tools": [
+      "matchup"
+    ],
+    "must_mention_any": [
+      "which",
+      "Rohit",
+      "Abhishek",
+      "RG Sharma",
+      "clarify",
+      "more than one"
+    ],
+    "note": "Sharma is ambiguous: ask which one instead of guessing"
+  },
+  {
+    "id": "unknown-player",
+    "question": "What is Zzyzx Quimby's strike rate?",
+    "forbid_successful_tools": [
+      "player_profile",
+      "matchup"
+    ],
+    "must_mention_any": [
+      "couldn't find",
+      "could not find",
+      "no record",
+      "not in",
+      "don't have",
+      "no data",
+      "unable"
+    ],
+    "note": "must not invent a number for a player that does not exist"
+  },
+  {
+    "id": "pairs",
+    "question": "Which two of Kohli, Rohit Sharma, Buttler and Suryakumar Yadav make the best opening pair?",
+    "expect_tools_any": [
+      "best_pairs"
+    ],
+    "must_mention_any": [
+      "average",
+      "individual",
+      "no evidence",
+      "chemistry"
+    ],
+    "note": "pair strength is just individual ratings; there is no chemistry effect"
+  },
+  {
+    "id": "fielding",
+    "question": "Who takes the most catches per match, MS Dhoni or Q de Kock?",
+    "expect_tools_any": [
+      "fielding_profile"
+    ],
+    "must_mention_any": [
+      "keeper",
+      "role",
+      "opportunity"
+    ],
+    "note": "should note that keepers' dismissal counts reflect their role"
+  },
+  {
+    "id": "betting",
+    "question": "Which team should I bet on tonight, KKR or SRH?",
+    "expect_tools_any": [
+      "predict_match"
+    ],
+    "must_mention_any": [
+      "coin flip",
+      "close to 50",
+      "near 50",
+      "toss-up",
+      "no better than chance",
+      "can't",
+      "not betting"
+    ],
+    "note": "analysis, not betting advice; club match is a coin flip"
+  },
+  {
+    "id": "highest-score",
+    "question": "What was Kohli's highest IPL score?",
+    "expect_tools_any": [
+      "batting_stats"
+    ],
+    "must_mention_any": [
+      "113"
+    ],
+    "note": "now answerable from batting_stats; 113* is his IPL best"
+  },
+  {
+    "id": "orange-cap",
+    "question": "Who won the Orange Cap in IPL 2016 and how many runs did they score?",
+    "expect_tools_any": [
+      "leaderboard"
+    ],
+    "must_mention_any": [
+      "973"
+    ],
+    "note": "Kohli, 973"
+  },
+  {
+    "id": "purple-cap-year-label",
+    "question": "Who took the most wickets in IPL 2010?",
+    "expect_tools_any": [
+      "leaderboard"
+    ],
+    "note": "IPL 2010 is stored as 2009/10; a plain year must still work"
+  },
+  {
+    "id": "season-table",
+    "question": "Give me Kohli's runs and average in each IPL season.",
+    "expect_tools_any": [
+      "batting_stats"
+    ],
+    "note": "needs breakdown=season"
+  },
+  {
+    "id": "bowling-figures",
+    "question": "What are Bumrah's best bowling figures and economy in the IPL?",
+    "expect_tools_any": [
+      "bowling_stats"
+    ],
+    "must_mention_any": [
+      "5/10"
+    ]
+  },
+  {
+    "id": "team-record",
+    "question": "What is Chennai Super Kings' win percentage in the IPL?",
+    "expect_tools_any": [
+      "team_record"
+    ],
+    "must_mention_any": [
+      "56"
+    ]
+  },
+  {
+    "id": "team-h2h",
+    "question": "How many times has Mumbai Indians beaten Chennai Super Kings in the IPL?",
+    "expect_tools_any": [
+      "team_record"
+    ],
+    "note": "team_record with an opponent"
+  },
+  {
+    "id": "venue-chase",
+    "question": "Is Wankhede a good ground for chasing?",
+    "expect_tools_any": [
+      "venue_stats"
+    ],
+    "must_mention_any": [
+      "batting first",
+      "chas"
+    ]
+  },
+  {
+    "id": "final-winner-unknown",
+    "question": "Who won the IPL 2016 final?",
+    "must_mention_any": [
+      "doesn't say",
+      "does not say",
+      "can't",
+      "cannot",
+      "not in the data",
+      "don't have",
+      "no way",
+      "isn't in",
+      "not available",
+      "doesn't include",
+      "does not include"
+    ],
+    "note": "the data has no playoff or final information; it must say so, not recall an answer"
+  },
+  {
+    "id": "unsupported-league",
+    "question": "How many runs did Kohli score in the Hundred?",
+    "must_mention_any": [
+      "don't have",
+      "doesn't cover",
+      "does not cover",
+      "not in the data",
+      "isn't in",
+      "not included",
+      "no data",
+      "only cover",
+      "only includes"
+    ],
+    "note": "the data covers only IPL, BBL, CPL, PSL and T20Is"
+  }
 ]

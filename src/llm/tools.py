@@ -20,6 +20,7 @@ import numpy as np
 import pandas as pd
 
 from src.config import DB_PATH, TEAM_ALIASES
+from src.llm import stats as S
 from src.features.bowling_matchup import head_to_head as _head_to_head
 from src.features.fielding import compute_fielding_features
 from src.models.player_ratings import PHASES, RatingBook, load_balls
@@ -106,8 +107,16 @@ class Toolbox:
         self._book = book
         self._fielding: pd.DataFrame | None = None
         self._teams: dict[str, set[str]] | None = None
+        self._con = None
 
     # -- lazy loaders
+    @property
+    def con(self):
+        """Read-only DuckDB connection used by the counting-stat tools."""
+        if self._con is None:
+            self._con = duckdb.connect(self.db_path, read_only=True)
+        return self._con
+
     @property
     def book(self) -> RatingBook:
         if self._book is None:
@@ -140,6 +149,25 @@ class Toolbox:
             for (_, name), balls in idx["balls"].items():
                 names[name] = max(names.get(name, 0), int(balls))
         return names
+
+    def _any_player(self, name: str) -> str:
+        """Resolve a player name (any pool) or raise an actionable error."""
+        names = self._player_names()
+        if name in names:
+            return name
+        r = resolve(name, names)
+        if r["resolved"]:
+            return r["resolved"]
+        raise ValueError(f"Could not uniquely identify {name!r}. Candidates: "
+                         f"{[c['name'] for c in r['candidates']] or 'none'} - call find_player.")
+
+    def _any_team(self, name: str, league: str | None) -> str:
+        r = self.find_team(name, league)
+        if not r["resolved"]:
+            raise ValueError(f"Could not identify team {name!r}"
+                             + (f" in {league}" if league else "")
+                             + f": {[c['team'] for c in r['candidates']] or 'no match'}")
+        return r["resolved"]["team"]
 
     # -- caveats
     @staticmethod
@@ -369,6 +397,37 @@ class Toolbox:
         p["reliability"] = "moderate" if league == "T20I" else "very low (near coin flip)"
         return p
 
+    # ── counting statistics (facts, not model outputs) ─────────────
+    def batting_stats(self, name: str, league: str | None = None, season: str | None = None,
+                      breakdown: str | None = None) -> dict:
+        """Career or season batting line: runs, average, strike rate, highest score, 50s/100s."""
+        return S.batting_stats(self.con, self._any_player(name), league, season, breakdown)
+
+    def bowling_stats(self, name: str, league: str | None = None, season: str | None = None,
+                      breakdown: str | None = None) -> dict:
+        """Career or season bowling line: wickets, economy, average, best figures, hauls."""
+        return S.bowling_stats(self.con, self._any_player(name), league, season, breakdown)
+
+    def leaderboard(self, stat: str, league: str | None = None, season: str | None = None,
+                    top: int = 10, min_balls: int = 120) -> dict:
+        """Top players for runs / wickets / sixes / fours / strike_rate / economy / etc."""
+        return S.leaderboard(self.con, stat, league, season, top, min_balls)
+
+    def team_record(self, team: str, league: str | None = None, season: str | None = None,
+                    opponent: str | None = None) -> dict:
+        """Win/loss record for a team, or the head-to-head between two teams."""
+        t = self._any_team(team, league)
+        o = self._any_team(opponent, league) if opponent else None
+        return S.team_record(self.con, t, league, season, o)
+
+    def standings(self, league: str, season: str) -> dict:
+        """Wins-ordered table for one league season."""
+        return S.standings(self.con, league, season)
+
+    def venue_stats(self, venue: str, league: str | None = None) -> dict:
+        """Scoring and chasing record at a ground (name search, e.g. 'Wankhede')."""
+        return S.venue_stats(self.con, venue, league)
+
     # ── dispatch ────────────────────────────────────────────────────
     def call(self, name: str, arguments: dict | str | None = None) -> dict:
         """Run a tool by name.  Never raises: failures come back as {'error': ...}."""
@@ -405,6 +464,13 @@ def _json_default(o):
     return str(o)
 
 
+_LEAGUE = {"type": "string", "enum": list(LEAGUES),
+           "description": "Restrict to one league; omit for all leagues combined."}
+_SEASON = {"type": "string",
+           "description": "A four-digit year (finds the edition that concluded that year, e.g. "
+                          "'2010' -> the 2009/10 IPL) or an exact label such as '2023/24'."}
+_BREAKDOWN = {"type": "string", "enum": ["season", "league"],
+              "description": "Also return one row per season or per league."}
 _PHASE = {"type": "string", "enum": list(PHASES.values()),
           "description": "Innings phase; omit for the over-weighted average of all phases."}
 _POOL = {"type": "string", "enum": list(POOLS), "description": POOL_HELP}
@@ -457,5 +523,39 @@ TOOL_SPECS = [
           {"team_a": {"type": "string"}, "team_b": {"type": "string"},
            "league": {"type": "string", "enum": list(LEAGUES)}, "venue": {"type": "string"}},
           ["team_a", "team_b", "league"]),
+]
+TOOL_SPECS += [
+    _spec("batting_stats",
+          "Counting batting stats for a player: innings, runs, average, strike rate, highest "
+          "score, 50s/100s, fours, sixes. Use for career or single-season lines, optionally per "
+          "league; breakdown='season' gives a season-by-season table. These are raw facts.",
+          {"name": {"type": "string"}, "league": _LEAGUE, "season": _SEASON,
+           "breakdown": _BREAKDOWN}, ["name"]),
+    _spec("bowling_stats",
+          "Counting bowling stats for a player: wickets, economy, average, strike rate, best "
+          "figures, 3/5-wicket hauls. Career or season, optionally per league or by season.",
+          {"name": {"type": "string"}, "league": _LEAGUE, "season": _SEASON,
+           "breakdown": _BREAKDOWN}, ["name"]),
+    _spec("leaderboard",
+          "Top players for a stat, e.g. Orange Cap (runs) or Purple Cap (wickets) for a season, "
+          "or all-time most sixes. stat is one of: "
+          + ", ".join(S.LEADERBOARD_STATS) + ". Rate stats need min_balls to qualify.",
+          {"stat": {"type": "string", "enum": list(S.LEADERBOARD_STATS)}, "league": _LEAGUE,
+           "season": _SEASON, "top": {"type": "integer", "minimum": 1, "maximum": 50},
+           "min_balls": {"type": "integer", "minimum": 1}}, ["stat"]),
+    _spec("team_record",
+          "A team's wins, losses and win percentage; give opponent for a head-to-head between "
+          "two teams (e.g. how often MI beat CSK). Filter by league and/or season.",
+          {"team": {"type": "string"}, "league": _LEAGUE, "season": _SEASON,
+           "opponent": {"type": "string"}}, ["team"]),
+    _spec("standings",
+          "Wins-ordered table for one league season (played, won, lost). Does not include "
+          "points, net run rate or playoffs, and cannot say who won the final.",
+          {"league": {"type": "string", "enum": list(LEAGUES)}, "season": _SEASON},
+          ["league", "season"]),
+    _spec("venue_stats",
+          "Scoring pattern at a ground found by name search (e.g. 'Wankhede'): average first- "
+          "and second-innings scores, highest total and how often the team batting first wins.",
+          {"venue": {"type": "string"}, "league": _LEAGUE}, ["venue"]),
 ]
 TOOL_NAMES = {s["name"] for s in TOOL_SPECS}

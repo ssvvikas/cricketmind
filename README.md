@@ -154,6 +154,16 @@ name / description / input_schema shape).
 | `matchup`, `recommend_bowlers` | Phase-aware expected runs per over and dismissal chance |
 | `best_pairs`, `head_to_head`, `fielding_profile` | Pair strength, raw records, dismissals per match |
 | `predict_match` | Win probability; club leagues are labelled "very low (near coin flip)" |
+| `batting_stats`, `bowling_stats` | Career / season / per-league lines: runs, average, strike rate, highest score, 50s/100s, wickets, economy, best figures |
+| `leaderboard` | Orange/Purple Cap style tables (runs, wickets, sixes, fours, strike rate, economy, ...) |
+| `team_record`, `standings` | Win/loss records, team head-to-heads, season tables |
+| `venue_stats` | Average scores and chasing record at a ground |
+
+The counting stats are plain facts using standard definitions (average = runs / dismissals, run-outs
+are not the bowler's, wides are not balls faced) and were checked against well-known figures, e.g.
+Kohli's 973 runs at 81.08 in IPL 2016, Gill's 890 and Shami's 28 in 2023. Season labels in the
+source are inconsistent (IPL 2010 is stored as `2009/10`), so a plain year resolves to the edition
+that concluded that year.
 
 Honesty is built in: each result carries `caveats` (small samples, associate-nation pools,
 head-to-head not predictive, keeper-driven fielding numbers) and the system prompt tells the
@@ -164,7 +174,7 @@ pip install -e ".[agent]"                 # the anthropic SDK
 export ANTHROPIC_API_KEY=...              # or `ant auth login`
 python -m src.models.team_strength        # once: trains the match model
 python -m src.llm.agent "Who should open the bowling to Kohli in the powerplay?"
-python eval/run_eval.py                   # 14 honesty / tool-use checks against the live model
+python eval/run_eval.py                   # 23 honesty / tool-use checks against the live model
 ```
 
 The agent loop is a manual tool-use loop on `claude-opus-5-5` (effort `medium`, all parallel tool
@@ -174,8 +184,9 @@ results returned in one message, assistant turns kept unchanged). Server-side re
 in the answer appears in a tool result, club predictions are called coin flips, ambiguous names
 trigger a question, unknown players get no invented numbers.
 
-**Status:** the tool layer, agent loop and eval checks are unit-tested offline (a scripted fake
-client stands in for the API). The live API path and the eval have not yet been run.
+**Status:** unit-tested offline (a scripted fake client stands in for the API). The original 14
+live eval cases passed (13/14 on the first run; the one failure was an over-strict check, since
+fixed). The stat-tool cases added afterwards have not yet been run live.
 
 ## Quick Start
 
