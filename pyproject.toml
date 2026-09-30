@@ -46,7 +46,8 @@ llm = [
     "sentence-transformers>=3.0.0",
 ]
 rag = [
-    "fastembed>=0.3.0",  # dense embeddings for hybrid match search (ONNX, no PyTorch)
+    "fastembed>=0.3.0",  # dense embeddings (ONNX, no PyTorch)
+    "chromadb>=1.0.0",   # persistent vector store for the entity index
 ]
 api = [
     "fastapi>=0.111.0",

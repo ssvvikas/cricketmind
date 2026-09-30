@@ -230,13 +230,68 @@ handled inconsistently).
 | Held-out paraphrases, never tuned on (10) | 0.69 | 0.82 |
 
 Embeddings were only added because keyword search measurably failed on paraphrases ("went down to
-the wire" found nothing). ChromaDB was not used: 6,262 documents fit in a small Parquet + NumPy files (about 10 MB). The
+the wire" found nothing). The match search keeps its embeddings in a NumPy array, because 6,262 documents do not need a vector database (the entity index below does use ChromaDB). The
 assistant is told to prefer tags and filters for precise questions and to check each hit's facts,
 because free-text ranking is still wrong about one time in five.
 
 **Limits.** These are generated summaries, not commentary: no stories, quotes, crowd or
 "final / semi-final" information (the source does not record the stage). Margins are the
 official ones where present; awarded and rain-shortened matches are excluded from ball-based tags.
+
+## Entity search (Phase 4, ChromaDB)
+
+`src/rag/entity_index.py` turns every row of the six feature tables (batsman, bowler, team,
+partnership, fielding, matchup) into a short text chunk and stores it in a persistent ChromaDB
+collection under `data/embeddings/`. Each chunk carries `dataset` ("cricsheet_main"),
+`entity_type`, `entity_name` and `league` metadata (only the team table is split by league; the
+player tables aggregate all leagues, so their league is "all").
+
+```python
+from src.rag.entity_index import build_index, retrieve
+build_index()                                        # ~23,000 chunks, ~10 min (embedding)
+retrieve("How does Kohli bat in the death overs?")   # -> Kohli's chunks, closest first
+retrieve("Sharma", entity_type="bowler", top_k=3)
+```
+
+**Name first, then meaning.** If the question names a player or team ("Kohli", "Rohit Sharma",
+"CSK"), chunks mentioning that name are selected first and ranked semantically among themselves;
+a surname shared by several players searches all of them (up to six, most-played first). Names are
+verified as whole words (Chroma's own filter is a substring test, so "S Khan" would otherwise
+return "AS Khan"), "head to head" does not summon Travis Head, and everyday words that are also
+surnames (Head, Short, Hope, ...) count only when capitalised. If no chunk mentions the name, it
+falls back to plain semantic search and says so.
+
+**Content rules, from the backtests.** The retired Phase 1 scores (`legacy_score`, chemistry,
+vulnerability, fielding score) are never written into a chunk; fielding chunks say they count
+dismissal involvement, not skill; matchup chunks say they are raw small-sample records. Only pairs
+with at least 30 balls are indexed (5,121 of 82,722; most pairs have 6-11 balls, which is noise,
+and embedding all of them would take about half an hour): `build_index(min_matchup_balls=None)`
+indexes everything.
+
+**Chunk-type hint.** Words like "bat", "economy", "catches" or "partnership" point at a chunk type
+(and "against" with two named players at a matchup). Those types are fetched into the candidate
+pool explicitly and get a small fixed boost (0.05) on their similarity; `retrieve(...,
+intent_boost=0)` turns it off. Without this, a player's short numeric matchup and partnership
+chunks crowd out the right chunk: "Kohli's strike rate" returned a Kohli-vs-Arshdeep matchup.
+
+Measured on questions with a known right chunk type (`python eval/run_entity_eval.py`), top-1 is
+the right chunk type:
+
+| Question set | Hint off | Hint on |
+|---|---:|---:|
+| Development set, 25 questions (used to look for weaknesses) | 68% | 100% |
+| Held-out set, 20 questions (never tuned on) | 45% | **85%** (top-3: 95%) |
+
+The weight is not sensitive (anything from 0.05 to 1.0 scores the same on the development set), so
+the 0.05 chosen in advance was kept. Known misses: "How does Klaasen **hit**..." (no such word in
+the hint vocabulary) and two "batting average" questions where a partnership chunk still wins.
+
+**What it cannot do.** Embeddings find text that resembles a question; they cannot rank by a
+statistic. "Who scored the most runs?" or "best wicketkeeper" return arbitrary chunks, so a
+question with a superlative and no name comes back with a `warning` pointing to the leaderboard and
+ranking tools. It also has no team-vs-team chunks (use `team_record`).
+
+This index is not yet exposed to the assistant as a tool.
 
 ## Quick Start
 
@@ -282,7 +337,7 @@ cricketmind/
 
 ## Tech Stack
 
-Python 3.11+ · DuckDB · XGBoost · scikit-learn · fastembed (ONNX) · Claude API (tool use) · FastAPI · Docker
+Python 3.11+ · DuckDB · XGBoost · scikit-learn · ChromaDB · fastembed (ONNX) · Claude API (tool use) · FastAPI · Docker
 
 ## Status
 
