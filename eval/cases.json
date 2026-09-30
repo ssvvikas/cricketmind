@@ -269,9 +269,21 @@
       "isn't in",
       "not available",
       "doesn't include",
-      "does not include"
+      "does not include",
+      "doesn't mark",
+      "does not mark",
+      "not marked",
+      "isn't marked",
+      "don't mark",
+      "doesn't record",
+      "does not record",
+      "doesn't identify",
+      "does not identify",
+      "no way to tell",
+      "cannot tell",
+      "can't tell"
     ],
-    "note": "the data has no playoff or final information; it must say so, not recall an answer"
+    "note": "the data has no playoff or final information: it must say so. Naming the season's last match is fine only if it states that this is an assumption"
   },
   {
     "id": "unsupported-league",

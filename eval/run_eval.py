@@ -27,10 +27,19 @@ def main() -> int:
     here = Path(__file__).resolve().parent
     cases = [c for c in load_cases(here / "cases.json") if not args.case or c.id in args.case]
     toolbox = Toolbox()  # shared: loading ratings once
+    import anthropic
+
     rows, failed = [], 0
     for case in cases:
         agent = CricketAgent(toolbox=toolbox)
-        result = agent.ask(case.question)
+        try:
+            result = agent.ask(case.question)
+        except anthropic.APIStatusError as e:  # e.g. credit balance too low: keep what we have
+            (here / "results.json").write_text(json.dumps(rows, indent=2))
+            print(f"\nSTOPPED at {case.id!r}: the API returned {e.status_code}: "
+                  f"{getattr(e, 'message', e)}\n{len(rows)} completed cases were saved to "
+                  "eval/results.json.")
+            return 2
         calls = [asdict(c) for c in result.tool_calls]
         fails = check(case, result.text, calls)
         failed += bool(fails)
@@ -40,6 +49,7 @@ def main() -> int:
         rows.append({"id": case.id, "question": case.question, "answer": result.text,
                      "tools": [c["name"] for c in calls], "failures": fails,
                      "output_tokens": result.output_tokens})
+        (here / "results.json").write_text(json.dumps(rows, indent=2))  # saved after every case
     (here / "results.json").write_text(json.dumps(rows, indent=2))
     print(f"\n{len(cases) - failed}/{len(cases)} passed")
     return 1 if failed else 0

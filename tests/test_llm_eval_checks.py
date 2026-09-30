@@ -89,3 +89,25 @@ class TestCaseFile:
             assert set(c.expect_tools_any) <= TOOL_NAMES, c.id
             assert set(c.forbid_successful_tools) <= TOOL_NAMES, c.id
             assert c.expect_tools_any or c.must_mention_any or c.forbid_successful_tools, c.id
+
+
+class TestFinalWinnerCase:
+    """The 'final' question has no answer in the data; how the assistant may respond."""
+
+    @pytest.fixture()
+    def case(self):
+        cases = {c.id: c for c in load_cases(
+            Path(__file__).resolve().parent.parent / "eval" / "cases.json")}
+        return cases["final-winner-unknown"]
+
+    def test_an_answer_that_states_its_assumption_passes(self, case):
+        honest = ("Sunrisers won: they beat RCB by 8 runs on 29 May 2016. My data doesn't mark "
+                  "which match was the final; I'm treating this one as the final because it was "
+                  "the last match of the season.")
+        assert check(case, honest, []) == []
+
+    def test_a_flat_claim_with_no_caveat_fails(self, case):
+        assert check(case, "Sunrisers Hyderabad won the IPL 2016 final against RCB.", [])
+
+    def test_the_plain_no_answer_still_passes(self, case):
+        assert check(case, "I can't tell you: the data has no playoff information.", []) == []
