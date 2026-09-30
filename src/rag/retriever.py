@@ -16,7 +16,6 @@ The number of matches that passed the filters is returned with the hits, so "how
 about tagged matches are exact.
 """
 
-import pickle
 from collections.abc import Callable
 
 import numpy as np
@@ -27,7 +26,8 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from src.config import PROCESSED_DIR
 from src.rag.corpus import CORPUS_PATH, TAGS, build_corpus, save_corpus
 
-INDEX_PATH = PROCESSED_DIR / "rag" / "match_index.pkl"
+EMBEDDINGS_PATH = PROCESSED_DIR / "rag" / "match_embeddings.npy"
+INDEX_PATH = CORPUS_PATH  # the index is rebuilt from this file (+ the embeddings) on load
 EMBED_MODEL = "BAAI/bge-small-en-v1.5"
 HYBRID_WEIGHT = 0.5  # share of the fused score from embeddings (fixed in advance, not tuned)
 _embedder = None
@@ -217,20 +217,25 @@ class MatchIndex:
         return out
 
     # ── persistence ─────────────────────────────────────────────────
-    def __getstate__(self):
-        state = dict(self.__dict__)
-        state["_embed_fn"] = None  # functions are not pickled
-        return state
-
-    def save(self, path=INDEX_PATH) -> None:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        with open(path, "wb") as f:
-            pickle.dump(self, f)
+    # No pickling of this class: a pickle written by ``python -m src.rag.retriever`` records the
+    # class as ``__main__.MatchIndex`` and cannot be loaded from any other entry point.  The index
+    # is stored as plain files (Parquet + NumPy) and the fast TF-IDF step is refitted on load.
+    def save(self, corpus_path=CORPUS_PATH, embeddings_path=EMBEDDINGS_PATH) -> None:
+        save_corpus(self.corpus, corpus_path)
+        embeddings_path.parent.mkdir(parents=True, exist_ok=True)
+        if self.embeddings is not None:
+            np.save(embeddings_path, self.embeddings)
+        elif embeddings_path.exists():
+            embeddings_path.unlink()  # never leave embeddings that do not match the corpus
 
     @staticmethod
-    def load(path=INDEX_PATH) -> "MatchIndex":
-        with open(path, "rb") as f:
-            return pickle.load(f)
+    def load(corpus_path=CORPUS_PATH, embeddings_path=EMBEDDINGS_PATH) -> "MatchIndex":
+        corpus = pd.read_parquet(corpus_path)
+        emb = np.load(embeddings_path) if embeddings_path.exists() else None
+        if emb is not None and len(emb) != len(corpus):
+            logger.warning("Embeddings do not match the corpus; ignoring them (rebuild the index)")
+            emb = None
+        return MatchIndex(corpus, emb)
 
 
 def build_index(db_path: str | None = None, save: bool = True, embed: bool = True) -> MatchIndex:
@@ -244,9 +249,8 @@ def build_index(db_path: str | None = None, save: bool = True, embed: bool = Tru
             embeddings = fn(list(corpus["text"]))
     idx = MatchIndex(corpus, embeddings, fn)
     if save:
-        save_corpus(corpus)
         idx.save()
-        logger.info(f"Saved match index to {INDEX_PATH}")
+        logger.info(f"Saved match index to {CORPUS_PATH.parent}")
     return idx
 
 

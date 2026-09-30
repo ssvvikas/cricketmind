@@ -230,7 +230,7 @@ handled inconsistently).
 | Held-out paraphrases, never tuned on (10) | 0.69 | 0.82 |
 
 Embeddings were only added because keyword search measurably failed on paraphrases ("went down to
-the wire" found nothing). ChromaDB was not used: 6,262 documents fit in a 26 MB pickle. The
+the wire" found nothing). ChromaDB was not used: 6,262 documents fit in a small Parquet + NumPy files (about 10 MB). The
 assistant is told to prefer tags and filters for precise questions and to check each hit's facts,
 because free-text ranking is still wrong about one time in five.
 

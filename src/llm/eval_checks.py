@@ -50,7 +50,7 @@ def _matches(claim: float, decimals: int, is_pct: bool, sources: list[float]) ->
     while "6.1" may not stand for 6.4.
     """
     half_unit = 0.5 * 10 ** -decimals + 1e-9
-    for s in sources:
+    for s in (abs(x) for x in sources):  # the claim's digits carry no sign ("-0.01" -> 0.01)
         if is_pct:  # "62%" may quote 62.x, or a fraction 0.62x
             if abs(claim - s) <= half_unit or abs(claim - s * 100) <= half_unit:
                 return True

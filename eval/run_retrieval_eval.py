@@ -16,7 +16,7 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from src.rag.retriever import INDEX_PATH, MatchIndex  # noqa: E402
+from src.rag.retriever import MatchIndex  # noqa: E402
 
 # (group, query, filters, relevance rule).  "aligned" queries reuse the words indexed as tag
 # synonyms; "paraphrase" queries do not; "held-out" paraphrases were written after the ranking
@@ -73,7 +73,7 @@ def relevant(row, rule: str) -> bool:
 
 
 def main() -> int:
-    ix = MatchIndex.load(INDEX_PATH)
+    ix = MatchIndex.load()
     if ix.embeddings is None:
         print("The saved index has no embeddings; rebuild it with `python -m src.rag.retriever`.")
     c = ix.corpus

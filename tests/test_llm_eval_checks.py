@@ -38,6 +38,13 @@ class TestGrounding:
     def test_plain_integers_are_ignored(self):
         assert ungrounded_numbers("The top 3 of 407 batters, in 2025.", R) == []
 
+    def test_a_negative_figure_matches_its_magnitude(self):
+        src = [{"runs_saved_per_over": -0.01}]
+        # the answer's digits carry no sign, and Claude writes "-0.01" or "\u22120.01" (a real minus)
+        assert ungrounded_numbers("about average (-0.01 runs saved per over)", src) == []
+        assert ungrounded_numbers("about average (\u22120.01 runs saved per over)", src) == []
+        assert ungrounded_numbers("about average (0.09 runs saved per over)", src) == ["0.09"]
+
     def test_no_tool_results_means_any_decimal_is_ungrounded(self):
         assert ungrounded_numbers("He averages 42.5.", []) == ["42.5"]
 

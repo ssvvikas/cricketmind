@@ -174,12 +174,42 @@ class TestTextRanking:
 
 class TestPersistenceAndTool:
     def test_save_and_load_roundtrip(self, index, tmp_path):
-        path = tmp_path / "idx.pkl"
-        index.save(path)
-        again = MatchIndex.load(path)
+        cp, ep = tmp_path / "c.parquet", tmp_path / "e.npy"
+        index.save(cp, ep)
+        again = MatchIndex.load(cp, ep)
         a = index.search("low scoring", top=3)["hits"]
         b = again.search("low scoring", top=3)["hits"]
         assert [h["match_id"] for h in a] == [h["match_id"] for h in b]
+        assert again.embeddings is None and not ep.exists()  # keyword-only index saved no array
+
+    def test_saved_files_contain_no_pickled_classes(self, corpus, tmp_path):
+        """A pickled MatchIndex written by `python -m src.rag.retriever` says `__main__` and
+        cannot be loaded from another script (this crashed the assistant's search tool)."""
+        ix = MatchIndex(corpus, np.zeros((len(corpus), 4), dtype=np.float32))
+        ix.save(tmp_path / "c.parquet", tmp_path / "e.npy")
+        for f in tmp_path.iterdir():
+            assert b"__main__" not in f.read_bytes() and b"MatchIndex" not in f.read_bytes()
+
+    def test_the_index_loads_and_searches_in_a_fresh_process(self, corpus, tmp_path):
+        import subprocess
+        import sys
+        from pathlib import Path
+
+        cp, ep = tmp_path / "c.parquet", tmp_path / "e.npy"
+        MatchIndex(corpus).save(cp, ep)
+        code = (f"from pathlib import Path; from src.rag.retriever import MatchIndex; "
+                f"r = MatchIndex.load(Path({str(cp)!r}), Path({str(ep)!r})).search("
+                f"tags=['thumping win'], top=1); print(r['matched_total'])")
+        out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True,
+                             cwd=Path(__file__).resolve().parent.parent)
+        assert out.returncode == 0, out.stderr[-400:]
+        assert out.stdout.strip() == "3"
+
+    def test_mismatched_embeddings_are_ignored_not_trusted(self, corpus, tmp_path):
+        cp, ep = tmp_path / "c.parquet", tmp_path / "e.npy"
+        MatchIndex(corpus).save(cp, ep)
+        np.save(ep, np.zeros((2, 4), dtype=np.float32))  # wrong number of rows
+        assert MatchIndex.load(cp, ep).embeddings is None
 
     @pytest.fixture()
     def tb(self, db, index):  # noqa: F811
