@@ -1,4 +1,4 @@
-"""Fielding feature engineering — catches, run-outs, efficiency by zone."""
+"""Fielding features: dismissal involvement per match played (no position data exists)."""
 
 import duckdb
 import pandas as pd
@@ -8,11 +8,17 @@ from src.config import DB_PATH, PROCESSED_DIR
 
 
 def compute_fielding_features(db_path: str | None = None) -> pd.DataFrame:
-    """Compute per-fielder features from dismissal data.
+    """Per-fielder dismissal involvement, normalised by matches actually played.
 
-    Note: Cricsheet ball-by-ball data has fielder names on dismissals
-    (caught, stumped, run out) but not field position.  We derive
-    position proxies from dismissal type + bowling phase.
+    Cricsheet records who took a catch / stumping / run-out, but not field position, chances
+    offered or drops.  So this measures *involvement in dismissals*, which reflects role
+    (wicketkeepers, slip fielders, bowlers taking return catches) and opportunity at least as
+    much as fielding quality.  Backtests found it persists year to year (Spearman ~0.55 for
+    dismissals per match) but that a keeper flag explains much of that; there is no data to
+    separate skill from role, so no "fielding score" is produced.
+
+    Matches played come from the team sheets.  (An earlier version divided by matches in which
+    the fielder had a dismissal, which overstated the rate about 3x.)
     """
     con = duckdb.connect(db_path or str(DB_PATH), read_only=True)
 
@@ -28,66 +34,48 @@ def compute_fielding_features(db_path: str | None = None) -> pd.DataFrame:
             SELECT match_id, over_number, wicket_type, fielder_2 FROM ball_by_ball
             WHERE fielder_2 IS NOT NULL AND wicket_type = 'run out'
         ),
-        dismissals AS (
+        played AS (
+            SELECT person_name AS fielder, COUNT(DISTINCT match_id) AS matches_played
+            FROM match_players WHERE role = 'player' GROUP BY person_name
+        ),
+        agg AS (
             SELECT
-                match_id,
                 fielder,
-                wicket_type,
-                CASE
-                    WHEN over_number BETWEEN 0 AND 5 THEN 'powerplay'
-                    WHEN over_number BETWEEN 6 AND 14 THEN 'middle'
-                    ELSE 'death'
-                END AS phase,
-                -- Proxy for fielding zone based on dismissal type + phase
-                CASE
-                    WHEN wicket_type = 'caught and bowled' THEN 'caught_and_bowled'
-                    WHEN wicket_type = 'caught' AND over_number <= 5 THEN 'close_catching'
-                    WHEN wicket_type = 'caught' AND over_number >= 16 THEN 'boundary_catching'
-                    WHEN wicket_type = 'caught' THEN 'general_catching'
-                    WHEN wicket_type = 'run out' THEN 'run_out'
-                    WHEN wicket_type = 'stumped' THEN 'stumping'
-                    ELSE 'other'
-                END AS fielding_zone
+                COUNT(*) AS total_dismissals,
+                SUM(CASE WHEN wicket_type = 'caught' THEN 1 ELSE 0 END) AS catches,
+                SUM(CASE WHEN wicket_type = 'caught and bowled' THEN 1 ELSE 0 END)
+                    AS caught_and_bowled,
+                SUM(CASE WHEN wicket_type = 'run out' THEN 1 ELSE 0 END) AS run_outs,
+                SUM(CASE WHEN wicket_type = 'stumped' THEN 1 ELSE 0 END) AS stumpings,
+                SUM(CASE WHEN over_number BETWEEN 0 AND 5 THEN 1 ELSE 0 END)
+                    AS dismissals_powerplay,
+                SUM(CASE WHEN over_number BETWEEN 6 AND 14 THEN 1 ELSE 0 END)
+                    AS dismissals_middle,
+                SUM(CASE WHEN over_number >= 15 THEN 1 ELSE 0 END) AS dismissals_death,
+                COUNT(DISTINCT match_id) AS matches_with_dismissal
             FROM credits
+            GROUP BY fielder
+            HAVING COUNT(*) >= 3
         )
         SELECT
-            fielder,
-            COUNT(*) AS total_dismissals,
-            SUM(CASE WHEN wicket_type IN ('caught', 'caught and bowled') THEN 1 ELSE 0 END) AS catches,
-            SUM(CASE WHEN wicket_type = 'run out' THEN 1 ELSE 0 END) AS run_outs,
-            SUM(CASE WHEN wicket_type = 'stumped' THEN 1 ELSE 0 END) AS stumpings,
-            -- Zone breakdown
-            SUM(CASE WHEN fielding_zone = 'close_catching' THEN 1 ELSE 0 END) AS close_catches,
-            SUM(CASE WHEN fielding_zone = 'boundary_catching' THEN 1 ELSE 0 END) AS boundary_catches,
-            SUM(CASE WHEN fielding_zone = 'general_catching' THEN 1 ELSE 0 END) AS general_catches,
-            SUM(CASE WHEN fielding_zone = 'caught_and_bowled' THEN 1 ELSE 0 END) AS caught_and_bowled,
-            -- Phase breakdown
-            SUM(CASE WHEN phase = 'powerplay' THEN 1 ELSE 0 END) AS dismissals_powerplay,
-            SUM(CASE WHEN phase = 'middle' THEN 1 ELSE 0 END) AS dismissals_middle,
-            SUM(CASE WHEN phase = 'death' THEN 1 ELSE 0 END) AS dismissals_death,
-            COUNT(DISTINCT match_id) AS matches_fielded
-        FROM dismissals
-        GROUP BY fielder
-        HAVING COUNT(*) >= 3
+            agg.*,
+            -- never fewer than the matches we can see a dismissal in
+            GREATEST(COALESCE(played.matches_played, 0), agg.matches_with_dismissal)
+                AS matches_played
+        FROM agg LEFT JOIN played USING (fielder)
         ORDER BY total_dismissals DESC
     """).df()
 
     con.close()
 
     if not df.empty:
-        # Dismissals per match (fielding efficiency proxy)
-        df["dismissals_per_match"] = (df["total_dismissals"] / df["matches_fielded"]).round(3)
-
-        # Fielding score — weighted combination
-        df["fielding_score"] = (
-            0.30 * df["catches"].rank(pct=True, na_option="bottom")
-            + 0.25 * df["run_outs"].rank(pct=True, na_option="bottom")
-            + 0.20 * df["dismissals_per_match"].rank(pct=True, na_option="bottom")
-            + 0.15 * df["boundary_catches"].rank(pct=True, na_option="bottom")
-            + 0.10 * df["close_catches"].rank(pct=True, na_option="bottom")
-        ).round(4)
-
-        df = df.sort_values("fielding_score", ascending=False).reset_index(drop=True)
+        n = df["matches_played"]
+        df["dismissals_per_match"] = (df["total_dismissals"] / n).round(3)
+        df["catches_per_match"] = ((df["catches"] + df["caught_and_bowled"]) / n).round(3)
+        df["run_outs_per_match"] = (df["run_outs"] / n).round(3)
+        df["is_keeper"] = df["stumpings"] > 0  # anyone credited with a stumping
+        df = df.drop(columns="matches_with_dismissal")
+        df = df.sort_values("dismissals_per_match", ascending=False).reset_index(drop=True)
 
     logger.info(f"Fielding features computed for {len(df)} fielders")
     return df

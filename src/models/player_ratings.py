@@ -29,8 +29,9 @@ def load_balls(db_path: str | None = None) -> pd.DataFrame:
     """Ball-level table with pool, year and phase for every delivery."""
     con = duckdb.connect(db_path or str(DB_PATH), read_only=True)
     df = con.execute("""
-        SELECT match_id, date, league, batting_team, bowling_team, over_number, batter, bowler,
-               runs_batter, bowler_runs, is_faced, is_legal, is_bowler_wicket,
+        SELECT match_id, date, league, batting_team, bowling_team, innings, over_number,
+               batter, non_striker, bowler, runs_batter, runs_extras, bowler_runs,
+               is_faced, is_legal, is_bowler_wicket,
                (is_wicket AND player_out = batter) AS batter_out
         FROM ball_by_ball
     """).df()
@@ -245,6 +246,31 @@ class RatingBook:
         df = pd.DataFrame(rows).sort_values(
             ["expected_runs_per_over", "dismissal_prob_per_ball"], ascending=[True, False])
         return df.reset_index(drop=True)
+
+    def pair_expectation(self, a: str, b: str, pool: str, phase: str | int | None = None) -> dict:
+        """Expected batting output while two batters are together.
+
+        Deliberately the average of the two individual ratings on top of par: backtests found
+        a pair's own history adds nothing (and hurts), so there is no 'chemistry' term.
+        """
+        ea = self.expected(a, "__none__", pool, phase)
+        eb = self.expected(b, "__none__", pool, phase)
+        return {
+            "a": a, "b": b, "pool": pool, "phase": phase or "all",
+            "expected_runs_per_over": round((ea["expected_runs_per_over"]
+                                             + eb["expected_runs_per_over"]) / 2, 2),
+            "a_balls": ea["batter_balls"], "b_balls": eb["batter_balls"],
+        }
+
+    def best_pairs(self, batters: list[str], pool: str, phase: str | int | None = None,
+                   top: int | None = None) -> pd.DataFrame:
+        """Rank every pair from a squad by expected runs per over together."""
+        from itertools import combinations
+
+        rows = [self.pair_expectation(a, b, pool, phase) for a, b in combinations(batters, 2)]
+        df = pd.DataFrame(rows).sort_values("expected_runs_per_over", ascending=False)
+        df = df.reset_index(drop=True)
+        return df.head(top) if top else df
 
     def save(self, out_dir=None) -> None:
         from src.config import PROCESSED_DIR

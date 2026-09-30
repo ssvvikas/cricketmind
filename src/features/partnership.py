@@ -8,7 +8,13 @@ from src.config import DB_PATH, PROCESSED_DIR
 
 
 def compute_partnership_features(db_path: str | None = None) -> pd.DataFrame:
-    """Compute per-partnership features: runs together, run rate, chemistry score."""
+    """Descriptive per-partnership records: runs together, run rate, best stand.
+
+    There is deliberately no "chemistry score": backtests showed a pair's own history predicts
+    its future scoring far worse than the two batters' individual ratings (Spearman 0.03 vs 0.22
+    in club cricket), and adding pair history to those ratings made predictions worse.  For a
+    forecast use ``RatingBook.pair_expectation``.
+    """
     con = duckdb.connect(db_path or str(DB_PATH), read_only=True)
 
     logger.info("Computing partnership features...")
@@ -66,17 +72,6 @@ def compute_partnership_features(db_path: str | None = None) -> pd.DataFrame:
     """).df()
 
     con.close()
-
-    # ── chemistry score ───────────────────────────────────────────
-    # Measures how much better the pair performs together vs. average
-    # Higher = they bring out the best in each other
-    if not df.empty:
-        df["chemistry_score"] = (
-            0.35 * df["avg_partnership_runs"].rank(pct=True, na_option="bottom")
-            + 0.25 * df["run_rate"].rank(pct=True, na_option="bottom")
-            + 0.20 * df["rotation_pct"].rank(pct=True, na_option="bottom")
-            + 0.20 * df["times_paired"].rank(pct=True, na_option="bottom")
-        ).round(4)
 
     logger.info(f"Partnership features computed for {len(df)} pairs")
     return df

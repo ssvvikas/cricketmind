@@ -10,8 +10,8 @@ CricketMind answers five core questions about T20 cricket:
 |--------|----------|--------|
 | **Team Strength** | Which team is stronger head-to-head? | XGBoost classifier with SHAP explainability |
 | **Batsman Ranking** | Who's the best batsman in current form? | Era/phase-adjusted runs above par, shrunk and recency-weighted (backtested) |
-| **Fielding Analysis** | Who fields best, and how? | Dismissal-based fielding score (catches, run-outs, stumpings by phase). Cricsheet has no fielding positions, so true zone analysis isn't possible |
-| **Partnership** | Which batting pair works best together? | Chemistry score from complementary metrics |
+| **Fielding Analysis** | Who is involved in the most dismissals? | Catches, run-outs and stumpings per match played, with a keeper flag. Cricsheet has no positions, chances or drops, so fielding *quality* can't be measured |
+| **Partnership** | Which batting pair works best together? | Average of the two batters' ratings (a pair's own history was tested and adds nothing) |
 | **Bowling Strategy** | Which bowler to start against a batsman? | Additive batter + bowler ratings by phase (head-to-head history tested and rejected) |
 
 ## Architecture
@@ -130,12 +130,15 @@ Spearman rank correlation with next-year above-par performance):
 | Batting, Full-Member internationals | 0.34, no better than raw strike rate (0.36); small sample |
 | Bowling: runs saved | Predictable (0.25-0.41), but raw economy is as good as the adjusted rating |
 | Bowling: wickets | Barely persists (0.06-0.11): don't rank bowlers by wickets |
+| Partnerships | Phase 1 chemistry score **0.03** (club) / 0.04 (intl). Individual ratings of the two batters: **0.22 / 0.30**. Adding the pair's own history made it worse at every shrinkage tried |
+| Fielding | Phase 1 fielding score 0.40 vs plain dismissals per match played **0.59**. It also divided by matches *with a dismissal* (~3x too high). Catching persists (~0.5 even excluding keepers) but reflects role and opportunity, not measurable skill |
 | Matchups on future balls | Additive ratings beat par (+0.7% MSE); **adding head-to-head history made it worse** at every shrinkage tried, and raw head-to-head (Phase 1's approach) was 4.8% worse than par |
 
 So the adjusted ratings mainly buy comparability across eras and phases, not better rankings than
 raw strike rate or economy. The matchup model therefore uses no head-to-head history; raw
 head-to-head is exposed only as a fact (`head_to_head`). The Phase 1 `rank_score` (now
-`legacy_score`) and `vulnerability_score` were removed or demoted because of these results.
+`legacy_score`), `vulnerability_score`, `chemistry_score` and `fielding_score` were removed or
+demoted because of these results.
 
 ## Quick Start
 
@@ -187,7 +190,7 @@ Python 3.11+ · DuckDB · XGBoost · Hugging Face (Transformers + PEFT) · Chrom
 
 - [x] Phase 1: Data foundation + feature engineering (IPL + T20I)
 - [x] Phase 1.5: Direct Cricsheet ingestion (BBL, CPL, PSL)
-- [ ] Phase 2: ML models (team-strength done: strong for T20I, ~coin flip for club leagues; batsman, fielding, partnership and bowling-strategy models remaining)
+- [x] Phase 2: ML models (team strength: strong for T20I, ~coin flip for club leagues; player ratings, matchups, pairs and fielding backtested and simplified)
 - [ ] Phase 3: LLM fine-tuning
 - [ ] Phase 4: RAG pipeline
 - [ ] Phase 5: API + frontend

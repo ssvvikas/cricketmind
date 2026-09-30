@@ -219,7 +219,10 @@ class TestPartnershipFeatures:
         pair = df[(df.player_a == "p1") & (df.player_b == "p2")]
         assert len(pair) == 1
         assert pair.iloc[0]["times_paired"] == N_MATCHES
-        assert "chemistry_score" in df.columns
+
+    def test_no_chemistry_score(self, db):
+        # backtested at ~zero predictive value (worse than individual ratings), so removed
+        assert "chemistry_score" not in compute_partnership_features(db_path=db).columns
 
 
 class TestFieldingFeatures:
@@ -233,8 +236,27 @@ class TestFieldingFeatures:
         assert df.loc["p4", "caught_and_bowled"] == N_MATCHES
         assert df.loc["p5", "catches"] == N_MATCHES
 
-    def test_has_fielding_score(self, db):
-        assert "fielding_score" in compute_fielding_features(db_path=db).columns
+    def test_no_fielding_score_and_has_normalised_rates(self, db):
+        df = compute_fielding_features(db_path=db)
+        assert "fielding_score" not in df.columns
+        assert {"dismissals_per_match", "catches_per_match", "is_keeper",
+                "matches_played"} <= set(df.columns)
+
+    def test_matches_played_uses_team_sheets_not_matches_with_a_dismissal(self, db, tmp_path):
+        import shutil
+        copy = str(tmp_path / "field.duckdb")
+        shutil.copy(db, copy)
+        con = duckdb.connect(copy)
+        # p5 has dismissals in 5 matches but played 6 (no credit in match 6)
+        con.execute("UPDATE ball_by_ball SET fielder = NULL, wicket_type = NULL, "
+                    "player_out = NULL, is_wicket = FALSE, is_bowler_wicket = FALSE "
+                    "WHERE match_id = 6 AND fielder = 'p5'")
+        for mid in range(1, 7):  # p5 is on the team sheet of all six matches
+            con.execute("INSERT INTO match_players (match_id, person_name, identifier, team, "
+                        "role) VALUES (?, 'p5', 'p5', 'Team A', 'player')", [mid])
+        con.close()
+        row = compute_fielding_features(db_path=copy).set_index("fielder").loc["p5"]
+        assert row["matches_played"] == 6  # the old denominator would give 5
 
 
 class TestMatchupFeatures:

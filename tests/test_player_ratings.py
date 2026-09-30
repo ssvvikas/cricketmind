@@ -203,3 +203,24 @@ class TestPhaseWeighting:
         assert book.expected("a", "y", "club")["expected_runs_per_over"] > 0  # only middle exists
         with pytest.raises(KeyError):
             book.expected("a", "y", "club", "death")
+
+
+class TestPairs:
+    @pytest.fixture()
+    def book(self, league):
+        return RatingBook(league[0], as_of=league[1], halflife_years=None)
+
+    def test_pair_is_order_independent_and_averages_individuals(self, book):
+        ab = book.pair_expectation("hitter", "slow", "club", "middle")
+        ba = book.pair_expectation("slow", "hitter", "club", "middle")
+        assert ab["expected_runs_per_over"] == ba["expected_runs_per_over"]
+        h = book.expected("hitter", "__none__", "club", "middle")["expected_runs_per_over"]
+        s = book.expected("slow", "__none__", "club", "middle")["expected_runs_per_over"]
+        assert ab["expected_runs_per_over"] == pytest.approx((h + s) / 2, abs=0.01)
+
+    def test_best_pairs_ranks_strongest_batters_first(self, book):
+        pairs = book.best_pairs(["hitter", "avg", "slow", "avg2"], "club", "middle")
+        assert len(pairs) == 6
+        assert "hitter" in {pairs.loc[0, "a"], pairs.loc[0, "b"]}
+        assert "slow" in {pairs.iloc[-1]["a"], pairs.iloc[-1]["b"]}
+        assert pairs["expected_runs_per_over"].is_monotonic_decreasing
