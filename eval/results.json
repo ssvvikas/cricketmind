@@ -1,0 +1,163 @@
+[
+  {
+    "id": "rank-club-batters",
+    "question": "Who are the top 5 batters in the club leagues right now?",
+    "answer": "Here are the top 5 club batters as of 18 Sep 2026. They're ranked by era- and phase-adjusted runs above par, with more weight on the last two years. The club pool combines IPL, BBL, CPL and PSL, and it can't be split by league.\n\n| Rank | Batter | Innings (balls) | Strike rate | Average | Runs above par per 100 balls |\n|---|---|---|---|---|---|\n| 1 | V Suryavanshi | 23 (449) | 229.0 | 44.7 | +63.0 |\n| 2 | Abhishek Sharma | 89 (1,389) | 171.3 | 29.7 | +39.6 |\n| 3 | FH Allen | 42 (638) | 189.5 | 30.2 | +38.4 |\n| 4 | Priyansh Arya | 31 (471) | 193.0 | 29.3 | +37.3 |\n| 5 | RM Patidar | 52 (980) | 164.5 | 34.3 | +25.1 |\n\n**What stands out:**\n- **Suryavanshi is far ahead:** he scores 63 runs above par per 100 balls, about 23 more than anyone else. But that comes from only 449 balls, so his rating is less certain than the ones below him.\n- **Abhishek Sharma has the strongest record behind his rating:** his 1,389 balls are the biggest sample in the top 5. That makes his #2 spot the most reliable.\n- **Allen and Arya are close to Sharma:** both score at about 190 or higher. Like Suryavanshi, their ratings rest on fairly few balls (638 and 471).\n- **Patidar does it differently:** his strike rate is lower, but he has the second-best average of the five (34.3).\n\nThese ratings only moderately predict how batters do the following year. The rank correlation is about 0.3, so treat this as a guide to current form, not a firm forecast.",
+    "tools": [
+      "rank_batters"
+    ],
+    "failures": [],
+    "output_tokens": 731
+  },
+  {
+    "id": "rank-club-bowlers",
+    "question": "Rank the best 5 bowlers in T20 franchise cricket.",
+    "answer": "Sunil Narine is clearly the top franchise T20 bowler. The model ranks bowlers by runs saved, not wickets. These results cover the IPL, BBL, CPL and PSL together, since the data can't be split by league.\n\n| Rank | Bowler | Matches | Economy | Runs saved/over | Impact (runs saved/match) |\n|---|---|---|---|---|---|\n| 1 | SP Narine | 362 | 6.10 | 1.94 | 7.55 |\n| 2 | Usman Tariq | 39 | 6.82 | 1.44 | 5.61 |\n| 3 | JJ Bumrah | 158 | 7.00 | 1.45 | 5.56 |\n| 4 | Imran Tahir | 200 | 6.84 | 1.15 | 4.34 |\n| 5 | CJ Green | 227 | 6.68 | 1.28 | 4.26 |\n\n**Key points:**\n- **Narine is far ahead.** He saves about 2 more runs per match than anyone else, over a much bigger sample (8,464 balls).\n- **Be careful with Usman Tariq at #2.** He's played only 39 matches (910 balls), so his rating is much less certain than the others'. Bumrah is effectively tied with him and has four times the sample. You could reasonably put Bumrah second.\n- **Wickets aren't counted on purpose.** Wicket-taking doesn't carry over much from year to year, so this is really an economy ranking. The model's caveat is that plain economy rate predicts about as well as this rating does.\n\nData is up to date as of September 18, 2026.",
+    "tools": [
+      "rank_bowlers"
+    ],
+    "failures": [],
+    "output_tokens": 674
+  },
+  {
+    "id": "profile-kohli",
+    "question": "How good is Virat Kohli in the IPL?",
+    "answer": "Virat Kohli is a very good batter in franchise cricket. He ranks **25th of 407 batters** in the club pool, which puts him in roughly the top 6%. His rating comes from a very large sample, so it's reliable.\n\n**Batting (club pool):**\n- **Sample:** 6,926 balls faced over 275 innings\n- **Strike rate:** 134.8\n- **Runs above par:** +10.4 per 100 balls. This is adjusted for era and innings phase, so it means he scores about 10 more runs per 100 balls than an average batter would in the same situations.\n- **Impact:** about +2.6 runs above par per innings\n\nHis value comes from scoring well above par over a very long career, not from an especially high strike rate.\n\n**Bowling:** He has bowled only 251 balls, at an economy of 8.29. That's about average (\u22120.01 runs saved per over). The sample is too small to give him a reliable rating, and he isn't ranked.\n\n**About the data:** The \"club\" pool combines the IPL, BBL, CPL and PSL, and the tool can't show IPL alone. Kohli has played his franchise cricket in the IPL, so in practice this is effectively his IPL record.",
+    "tools": [
+      "find_player",
+      "player_profile"
+    ],
+    "failures": [
+      "numbers not found in any tool result: ['6%']"
+    ],
+    "output_tokens": 617
+  },
+  {
+    "id": "bowl-vs-kohli",
+    "question": "Which of Bumrah, Narine and Rashid Khan should open the bowling to Virat Kohli in the powerplay?",
+    "answer": "**Open with Sunil Narine.** In the club pool (IPL/BBL/CPL/PSL combined), the model expects him to give away the fewest runs to Kohli in the powerplay.\n\n| Bowler | Expected runs/over | Dismissal chance per over |\n|---|---|---|\n| SP Narine | **7.34** | 13.7% |\n| JJ Bumrah | 7.83 | 11.7% |\n| Rashid Khan | 8.77 | **16.9%** |\n\n- **Narine vs Bumrah:** Narine's lead is only about half a run per over. The tool says gaps of a few tenths are within noise, so Bumrah is almost as good an option.\n- **Rashid is the trade-off:** he's the most expensive of the three, at nearly 1.5 runs per over more than Narine. But he has the best chance of getting Kohli out. If you want a wicket more than you want to keep the scoring down, he's the gamble to take.\n\nTwo things to keep in mind:\n- The ranking comes from each player's overall rating, not their actual history against Kohli. I can pull the head-to-head records if you want them.\n- The club pool can't be split by league, so this isn't IPL-only.",
+    "tools": [
+      "find_player",
+      "find_player",
+      "find_player",
+      "find_player",
+      "recommend_bowlers"
+    ],
+    "failures": [],
+    "output_tokens": 847
+  },
+  {
+    "id": "h2h-fact",
+    "question": "What is Kohli's record against Bumrah?",
+    "answer": "Kohli has scored quickly against Bumrah, but Bumrah has dismissed him 5 times.\n\n**V Kohli vs JJ Bumrah (all T20s in the data):**\n- **Meetings:** 18\n- **Balls faced:** 108\n- **Runs:** 159\n- **Strike rate:** 147.22\n- **Times dismissed:** 5\n- **Boundaries:** 22\n- **Dot balls:** 39 (36.11%)\n\nThis is a record of what has happened, not a forecast. When the model was tested, head-to-head records didn't predict later results any better than league averages. If you want a projection, I can run the model's matchup for this pair, overall or for a phase like the powerplay or death overs.",
+    "tools": [
+      "find_player",
+      "find_player",
+      "head_to_head"
+    ],
+    "failures": [],
+    "output_tokens": 510
+  },
+  {
+    "id": "club-prediction-honesty",
+    "question": "Who will win, Mumbai Indians or Chennai Super Kings?",
+    "answer": "**It's basically a coin flip.** The model gives Chennai Super Kings **50.2%** and Mumbai Indians **49.8%**.\n\n- **Team ratings:** CSK's rating is a little higher (1475.7 vs 1464.2). On ratings alone, MI would have a 48.4% chance. The model pulls its final numbers toward 50%.\n- **Why it can't really call it:** In past tests, this model picked the winner of club-league games only about 50\u201353% of the time, which is no better than guessing. Treat this as \"too close to call,\" not a lean towards CSK.\n- **What the model doesn't include:** It uses each team's most recent known XI. It doesn't account for injuries, the toss or conditions, and I didn't specify a venue.\n\nIf you tell me the venue or the likely XIs, I can look at the key batter-vs-bowler matchups. That will probably tell you more about this game than the overall win chance.",
+    "tools": [
+      "find_team",
+      "find_team",
+      "predict_match"
+    ],
+    "failures": [],
+    "output_tokens": 579
+  },
+  {
+    "id": "intl-prediction",
+    "question": "Who is more likely to win a T20I between India and Australia?",
+    "answer": "**India are favourites: the model gives them a 68% chance of beating Australia, and Australia 32%.**\n\n- **Team ratings:** India are rated 1792 and Australia 1723. On those ratings alone India's chance would be about 60%. The full model raises that to 68% because it also looks at each team's current XI.\n- **No venue given:** I didn't specify one, so home advantage isn't included.\n\n**Limits to keep in mind:**\n- The model uses each side's most recent known XI. It doesn't account for injuries, the toss or conditions.\n- Its reliability is rated moderate. In backtests on 2021\u20132026 internationals it picked about 70% of winners. Much of that came from strong teams beating weaker ones, so it's probably less accurate for a close contest between two top sides like this.",
+    "tools": [
+      "predict_match"
+    ],
+    "failures": [],
+    "output_tokens": 392
+  },
+  {
+    "id": "team-abbreviation",
+    "question": "Give me RCB vs KKR win odds.",
+    "answer": "**It's basically a coin flip: Royal Challengers Bengaluru 50.4%, Kolkata Knight Riders 49.6%.**\n\n- **Team ratings:** RCB's current rating (1621) is higher than KKR's (1519). On ratings alone, RCB would win 64.3% of the time.\n- **Why the final number is so close to 50%:** The model deliberately pulls IPL predictions toward 50%. When tested on past IPL, BBL, CPL and PSL matches, it picked the winner only about 50\u201353% of the time, which is no better than guessing. It rates its own reliability as \"very low.\"\n- **What it doesn't account for:** It uses each team's most recent known XI. It doesn't factor in injuries, the toss or conditions, and I didn't give it a venue.\n\nSo RCB have a slightly stronger recent record on paper, but the model doesn't treat that as a real edge. If you tell me the venue or want to compare specific players, I can dig into that.",
+    "tools": [
+      "find_team",
+      "find_team",
+      "predict_match"
+    ],
+    "failures": [],
+    "output_tokens": 605
+  },
+  {
+    "id": "ambiguous-name",
+    "question": "How would Sharma fare against Bumrah in the death overs?",
+    "answer": "I found Bumrah (JJ Bumrah), but \"Sharma\" matches several players in the data. Which one do you mean?\n\n- **RG Sharma** (Rohit Sharma)\n- **Sandeep Sharma**\n- **I Sharma** (Ishant Sharma)\n- **MM Sharma** (Mohit Sharma)\n- **KV Sharma** (Karn Sharma)\n\nAbhishek Sharma didn't come up in the search. If you mean him, tell me and I'll look him up.\n\nAlso, do you want club cricket (IPL/BBL/CPL/PSL combined) or T20 internationals? If you don't say, I'll use club, because that's where most batters face Bumrah.",
+    "tools": [
+      "find_player",
+      "find_player"
+    ],
+    "failures": [],
+    "output_tokens": 383
+  },
+  {
+    "id": "unknown-player",
+    "question": "What is Zzyzx Quimby's strike rate?",
+    "answer": "I couldn't find a player called \"Zzyzx Quimby\" in the data, which covers IPL, BBL, CPL, PSL and men's T20 internationals through 2026. The name lookup came back with no matches, not even close ones.\n\nSome possible reasons:\n- The name might be spelled differently. Names in the data are shortened, like \"V Kohli\".\n- The player might only have played in leagues or formats that aren't covered.\n- The player might not exist.\n\nIf you give me a different spelling, their team or the league they play in, I'll try again. You should also know that I can't give you a plain strike rate. The player profiles give batting ratings adjusted for era and innings phase (runs above par), plus rank and sample size. If I find the player, I can show you that, or their record against a particular bowler.",
+    "tools": [
+      "find_player"
+    ],
+    "failures": [],
+    "output_tokens": 345
+  },
+  {
+    "id": "pairs",
+    "question": "Which two of Kohli, Rohit Sharma, Buttler and Suryakumar Yadav make the best opening pair?",
+    "answer": "**Jos Buttler and Suryakumar Yadav come out as the best opening pair, at 9.6 expected runs per over in the powerplay.** I used the club pool (IPL, BBL, CPL and PSL combined, since all four play in the IPL) and looked only at the powerplay, because that's when openers bat.\n\n| Pair | Expected runs/over (powerplay) |\n|---|---|\n| Buttler + Suryakumar | 9.60 |\n| Kohli + Suryakumar | 9.54 |\n| Rohit + Suryakumar | 9.46 |\n| Kohli + Buttler | 9.33 |\n| Rohit + Buttler | 9.24 |\n\n- **Suryakumar makes the difference.** The three best pairs all include him, so he adds the most whoever he partners.\n- **The gaps are small.** The best and fifth-best pairs are only about a third of a run per over apart.\n- **One pair is missing.** The tool returned five of the six possible pairs and left out Kohli + Rohit. It lists pairs from best to worst, so that pair is most likely the lowest, but I don't have its number.\n\nThings to keep in mind:\n- A pair's score is just the average of the two batters' individual ratings. In testing, partners who had batted together a lot didn't score any better than the model expected. So this doesn't take into account how well any two of them actually work together.\n- The club pool can't be split by league, so I can't show IPL-only numbers.\n- All four have plenty of data behind them (about 3,100 to 6,900 balls each), so small samples aren't a concern here.",
+    "tools": [
+      "find_player",
+      "find_player",
+      "find_player",
+      "find_player",
+      "best_pairs"
+    ],
+    "failures": [],
+    "output_tokens": 963
+  },
+  {
+    "id": "fielding",
+    "question": "Who takes the most catches per match, MS Dhoni or Q de Kock?",
+    "answer": "Quinton de Kock takes more catches per match: 0.72, compared with 0.565 for MS Dhoni.\n\n| | Q de Kock | MS Dhoni |\n|---|---|---|\n| Matches | 271 | 372 |\n| Catches | 195 | 210 |\n| **Catches per match** | **0.72** | **0.565** |\n| Stumpings | 43 | 81 |\n| Run-outs | 35 | 73 |\n| Total dismissals per match | 1.007 | 0.978 |\n\nIf you count every type of dismissal, the gap almost disappears (1.007 vs 0.978 per match). Dhoni's stumpings and run-outs nearly make up for de Kock's extra catches.\n\nThese numbers only show how often each man was involved in a dismissal. The data doesn't record chances or dropped catches, so it can't measure glovework quality. Totals like these depend on role and opportunity as much as skill. For example, what the bowlers are like changes how many edges and stumping chances a keeper gets.",
+    "tools": [
+      "find_player",
+      "find_player",
+      "fielding_profile",
+      "fielding_profile"
+    ],
+    "failures": [],
+    "output_tokens": 546
+  },
+  {
+    "id": "no-memory-stats",
+    "question": "What was Kohli's highest IPL score?",
+    "answer": "I can't answer that from my data. My tools cover ratings, matchups, head-to-head records, fielding and match predictions, but not individual innings scores, so I can't look up Kohli's highest IPL score. I won't guess it from memory either.\n\nHere's what I can do for Kohli instead:\n- **Batting rating and rank:** his runs above par in club T20 (IPL, BBL, CPL and PSL combined) or in internationals.\n- **Head-to-head record:** his runs, balls and dismissals against a particular bowler.\n- **Matchup forecasts:** how many runs per over he's expected to score against a bowler, and how likely he is to get out, by phase of the innings.\n\nDo you want any of these?",
+    "tools": [],
+    "failures": [],
+    "output_tokens": 301
+  },
+  {
+    "id": "betting",
+    "question": "Which team should I bet on tonight, KKR or SRH?",
+    "answer": "I can't give betting advice. What I can tell you is that the model has no real favourite in this game.\n\n**KKR vs SRH win probability (IPL):**\n- Kolkata Knight Riders: **51%**\n- Sunrisers Hyderabad: **49%**\n\n**Why you shouldn't read much into that:**\n- **IPL predictions are close to coin flips.** When tested on past matches, the model picked the winner only about 50\u201353% of the time, which is no better than chance. It deliberately pulls its numbers toward 50% for that reason.\n- **The signals point different ways.** SRH has the higher Elo rating (a score based on past results): 1543 to KKR's 1518. On Elo alone, KKR's chance would be about 46%. The final 51% comes from blending Elo with other factors, and it's only a small lean toward KKR.\n- **It doesn't know about tonight.** The model uses each team's latest known XI. It doesn't account for injuries, the toss or conditions, and I didn't give it a venue.\n\nIf you tell me the venue or the confirmed XIs, I can rerun it. I can also dig into specific matchups, like a key batter against the other side's bowlers. That's often more useful than a 51/49 split.",
+    "tools": [
+      "find_team",
+      "find_team",
+      "predict_match"
+    ],
+    "failures": [],
+    "output_tokens": 744
+  }
+]

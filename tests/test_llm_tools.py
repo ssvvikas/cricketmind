@@ -111,6 +111,12 @@ class TestHonesty:
             json.dumps(r)
             assert r["caveats"], name
 
+    def test_profile_reports_top_percent_so_the_model_need_not_compute_it(self, tb):
+        b = tb.call("player_profile", {"name": "p1", "pool": "club"})["batting"]
+        assert b["rank_in_pool"] is None and b["top_percent_of_pool"] is None  # too few balls
+        assert T._top_percent(25, 407) == 6.1 and T._top_percent(1, 100) == 1.0
+        assert T._top_percent(None, 10) is None and T._top_percent(5, 0) is None
+
     def test_small_samples_are_flagged(self, tb):
         r = tb.call("player_profile", {"name": "p3", "pool": "club"})
         assert any("Small sample" in c for c in r["caveats"])

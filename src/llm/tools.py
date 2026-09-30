@@ -225,6 +225,7 @@ class Toolbox:
                     "runs_above_par_per_100_balls": round(row["runs_per_ball"] * 100, 1),
                     "impact_runs_above_par_per_innings": round(row["impact"], 2),
                     "rank_in_pool": rank, "ranked_among": len(ranked),
+                    "top_percent_of_pool": _top_percent(rank, len(ranked)),
                 }
                 out["caveats"] += self._sample_caveat(int(row["balls"]), "balls faced")
             else:
@@ -233,6 +234,7 @@ class Toolbox:
                     "economy": round(row["economy"], 2),
                     "runs_saved_per_over": round(row["saved_per_ball"] * 6, 2),
                     "rank_in_pool": rank, "ranked_among": len(ranked),
+                    "top_percent_of_pool": _top_percent(rank, len(ranked)),
                 }
                 out["caveats"] += self._sample_caveat(int(row["balls"]), "balls bowled")
                 out["caveats"].append("Bowlers are ranked on runs saved; wicket counts barely "
@@ -384,6 +386,11 @@ class Toolbox:
             return {"error": str(e).strip("'\"")}
         except Exception as e:  # keep the assistant alive whatever happens
             return {"error": f"{type(e).__name__}: {e}"}
+
+
+def _top_percent(rank: int | None, total: int) -> float | None:
+    """Rank as 'top X%' of the ranked pool, so the assistant can quote it instead of computing."""
+    return round(rank * 100 / total, 1) if rank and total else None
 
 
 def _json_default(o):

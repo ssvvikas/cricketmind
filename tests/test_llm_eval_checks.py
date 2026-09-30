@@ -19,6 +19,18 @@ class TestGrounding:
         assert ungrounded_numbers("About 49.8% for Mumbai, roughly 50%.", R) == []
         assert ungrounded_numbers("A strike rate of 134.8.", R) == []
 
+    def test_a_rounded_claim_may_quote_a_more_precise_source(self):
+        src = [{"top_percent_of_pool": 6.1, "rank": 25, "ranked_among": 407}]
+        assert ungrounded_numbers("He is in roughly the top 6%.", src) == []     # 6% ~ 6.1
+        assert ungrounded_numbers("He is in the top 6.1%.", src) == []
+        assert ungrounded_numbers("He is in the top 6.4%.", src) == ["6.4%"]     # too precise
+        assert ungrounded_numbers("He is in the top 9%.", src) == ["9%"]
+
+    def test_invented_percentage_near_a_real_probability_is_still_caught(self):
+        src = [{"p_team_a": 0.4983}]
+        assert ungrounded_numbers("Mumbai win 50% of the time.", src) == []
+        assert ungrounded_numbers("Mumbai win 62% of the time.", src) == ["62%"]
+
     def test_invented_statistics_are_caught(self):
         bad = ungrounded_numbers("His strike rate is 148.3 and he wins 62% of duels.", R)
         assert set(bad) == {"148.3", "62%"}

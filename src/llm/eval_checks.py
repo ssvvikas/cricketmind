@@ -43,14 +43,19 @@ def _numbers_in(obj) -> list[float]:
     return out
 
 
-def _matches(claim: float, is_pct: bool, sources: list[float]) -> bool:
-    """A claimed figure matches a source figure allowing rounding and %/fraction scaling."""
-    candidates = [claim, claim / 100] if is_pct else [claim]
+def _matches(claim: float, decimals: int, is_pct: bool, sources: list[float]) -> bool:
+    """A claimed figure matches a source figure allowing rounding and %/fraction scaling.
+
+    Rounding tolerance follows how precisely the claim is written: "6%" may stand for 6.1,
+    while "6.1" may not stand for 6.4.
+    """
+    half_unit = 0.5 * 10 ** -decimals + 1e-9
     for s in sources:
-        for c in candidates:
-            tol = max(0.06, abs(s) * 0.01)  # rounding to 1-2 significant decimals
-            if abs(c - s) <= tol or abs(c - s * 100) <= max(0.6, abs(s) * 100 * 0.01):
+        if is_pct:  # "62%" may quote 62.x, or a fraction 0.62x
+            if abs(claim - s) <= half_unit or abs(claim - s * 100) <= half_unit:
                 return True
+        elif abs(claim - s) <= max(half_unit, abs(s) * 0.005):
+            return True
     return False
 
 
@@ -66,7 +71,8 @@ def ungrounded_numbers(answer: str, tool_results: list[dict]) -> list[str]:
         raw, pct = m.group(1), bool(m.group(2))
         if "." not in raw and not pct:
             continue
-        if not _matches(float(raw), pct, sources):
+        decimals = len(raw.split(".")[1]) if "." in raw else 0
+        if not _matches(float(raw), decimals, pct, sources):
             bad.append(raw + ("%" if pct else ""))
     return bad
 
