@@ -249,7 +249,7 @@ class TestSpotting:
 
     def test_ordinary_words_are_not_surnames(self):
         for q in ("Who is the best batter?", "show me the most runs", "what is the average"):
-            assert spot(q) == {"players": [], "teams": []}
+            assert spot(q) == {"players": [], "teams": [], "ambiguous": []}
 
     def test_wordlike_surnames_need_a_capital_and_head_to_head_is_ignored(self):
         assert spot("What is the head to head record?")["players"] == []
@@ -346,6 +346,23 @@ class TestRetrieve:
         import json
 
         json.dumps(retrieve(built, "Kohli against Bumrah"))
+
+
+# ── ambiguity is reported, not hidden ────────────────────────────────────
+class TestAmbiguityReporting:
+    def test_a_shared_surname_is_reported_as_ambiguous(self):
+        assert spot("Sharma record")["ambiguous"] == ["Sharma"]
+
+    def test_resolved_names_are_not_ambiguous(self):
+        assert spot("Rohit Sharma")["ambiguous"] == []       # first name picks one
+        assert spot("Kohli")["ambiguous"] == []              # only one Kohli
+        assert EI.spot_names("Kohli", {"V Kohli": 9841.0, "T Kohli": 19.0}, {})["ambiguous"] == []
+
+    def test_retrieve_passes_the_information_on(self, built):
+        r = retrieve(built, "Sharma")
+        assert r["ambiguous_surnames"] == ["Sharma"]
+        assert set(r["named"]["players"]) == {"RG Sharma", "Sandeep Sharma"}
+        assert retrieve(built, "Kohli")["ambiguous_surnames"] == []
 
 
 # ── name spotting: dominance and possessives ─────────────────────────────
@@ -453,3 +470,37 @@ class TestSuperlativeWarning:
     def test_named_or_ordinary_questions_are_not_flagged(self, built):
         assert "warning" not in retrieve(built, "Kohli's highest score")
         assert "warning" not in retrieve(built, "team win rate in the IPL")
+
+
+# ── regressions found by running the real index ──────────────────────────
+class TestSpottingRegressions:
+    PLAYERS = {**PLAYERS, "Zulfiqar Babar": 500.0, "Babar Azam": 6000.0, "Aziz Mohammad": 300.0,
+               "Mohammad Rizwan": 5000.0, "A Sharma": 400.0, "AB Sharma": 300.0}
+
+    def spot(self, q):
+        return EI.spot_names(q, self.PLAYERS, {})
+
+    def test_first_names_are_not_taken_for_other_players_surnames(self):
+        """'Babar Azam' must not summon 'Zulfiqar Babar', nor 'Mohammad Rizwan' 'Aziz Mohammad'."""
+        r = self.spot("What is the best stand Babar Azam and Mohammad Rizwan have shared?")
+        assert set(r["players"]) == {"Babar Azam", "Mohammad Rizwan"} and r["ambiguous"] == []
+
+    def test_a_filler_word_is_not_a_first_name(self):
+        """'about Sharma' used to match only Sharmas whose initial is 'A' (via the word 'about')."""
+        r = self.spot("What about Sharma?")
+        assert set(r["players"]) == {"RG Sharma", "Sandeep Sharma", "A Sharma", "AB Sharma"}
+        assert r["ambiguous"] == ["Sharma"]
+
+    def test_capitalised_initials_that_are_also_english_words_still_count(self):
+        assert self.spot("How does AS Khan bowl?")["players"] == ["AS Khan"]  # 'as' is a stop-word
+        assert self.spot("How does S Khan bowl?")["players"] == ["S Khan"]
+
+    def test_a_lower_case_full_first_name_still_pins_the_player(self):
+        assert self.spot("mohammad rizwan form")["players"] == ["Mohammad Rizwan"]
+        # a first name that matches nobody gives no evidence, so it falls back to the surname
+        r = self.spot("rashid khan economy")  # no Rashid Khan in this dictionary
+        assert set(r["players"]) == {"S Khan", "AS Khan"} and r["ambiguous"] == ["khan"]
+
+    def test_initials_style_first_name_still_works(self):
+        assert self.spot("What about Rohit Sharma?")["players"] == ["RG Sharma"]
+        assert self.spot("Virat Kohli's form")["players"] == ["V Kohli"]

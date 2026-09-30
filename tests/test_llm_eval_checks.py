@@ -38,6 +38,13 @@ class TestGrounding:
     def test_plain_integers_are_ignored(self):
         assert ungrounded_numbers("The top 3 of 407 batters, in 2025.", R) == []
 
+    def test_a_decimal_claim_is_not_grounded_by_a_nearby_whole_number(self):
+        """'201.7' once passed because a fielding chunk said '201 dismissals' (0.5% slack)."""
+        src = [{"text": "V Kohli - fielding: 201 dismissals in 400 matches (0.50 per match)"}]
+        assert ungrounded_numbers("a strike rate of 201.7", src) == ["201.7"]
+        assert ungrounded_numbers("0.5 per match", src) == []          # 0.50 written as 0.5
+        assert ungrounded_numbers("0.51 per match", src) == ["0.51"]    # but not a different figure
+
     def test_a_negative_figure_matches_its_magnitude(self):
         src = [{"runs_saved_per_over": -0.01}]
         # the answer's digits carry no sign, and Claude writes "-0.01" or "\u22120.01" (a real minus)

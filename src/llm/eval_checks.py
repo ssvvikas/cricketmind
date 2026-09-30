@@ -54,7 +54,7 @@ def _matches(claim: float, decimals: int, is_pct: bool, sources: list[float]) ->
         if is_pct:  # "62%" may quote 62.x, or a fraction 0.62x
             if abs(claim - s) <= half_unit or abs(claim - s * 100) <= half_unit:
                 return True
-        elif abs(claim - s) <= max(half_unit, abs(s) * 0.005):
+        elif abs(claim - s) <= half_unit:  # no relative slack: "201.7" must not match "201"
             return True
     return False
 

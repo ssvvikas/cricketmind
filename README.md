@@ -163,6 +163,7 @@ name / description / input_schema shape).
 | `team_record`, `standings` | Win/loss records, team head-to-heads, season tables |
 | `venue_stats` | Average scores and chasing record at a ground |
 | `search_matches` | Find matches by tags / filters / description ("last-ball finishes at Chinnaswamy", "biggest chases") with exact counts |
+| `search_facts` | Stored records as text for what no other tool returns: strike rate / economy by phase, last-10-innings form, partnership records, team scoring rates |
 
 The counting stats are plain facts using standard definitions (average = runs / dismissals, run-outs
 are not the bowler's, wides are not balls faced) and were checked against well-known figures, e.g.
@@ -181,7 +182,7 @@ pip install -e ".[agent]"                 # the anthropic SDK
 export ANTHROPIC_API_KEY=...              # or `ant auth login`
 python -m src.models.team_strength        # once: trains the match model
 python -m src.llm.agent "Who should open the bowling to Kohli in the powerplay?"
-python eval/run_eval.py                   # 28 honesty / tool-use checks against the live model
+python eval/run_eval.py                   # 33 honesty / tool-use checks against the live model
 ```
 
 The agent loop is a manual tool-use loop on `claude-opus-5-5` (effort `medium`, all parallel tool
@@ -291,7 +292,7 @@ statistic. "Who scored the most runs?" or "best wicketkeeper" return arbitrary c
 question with a superlative and no name comes back with a `warning` pointing to the leaderboard and
 ranking tools. It also has no team-vs-team chunks (use `team_record`).
 
-This index is not yet exposed to the assistant as a tool.
+The index is exposed to the assistant as the `search_facts` tool. Its result names the players it matched and carries caveats that depend on what came back (a surname shared by several players tells the assistant to ask which one; matchup, fielding and partnership records carry their own limits; a ranking question carries the no-ranking warning).
 
 ## Quick Start
 

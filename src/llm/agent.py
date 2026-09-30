@@ -38,6 +38,11 @@ language and briefly. In particular: club-league (IPL/BBL/CPL/PSL) match predict
 to coin flips and the tool says so; ratings from small samples are unreliable; associate-nation \
 ratings are not comparable with club or full-member ratings; head-to-head records are facts, \
 not forecasts.
+- search_facts returns stored records (phase strike rates, last-10-innings form, partnership \
+stands, team scoring rates) as text. It finds records that resemble the question and cannot rank \
+players, so for "best" or "most" questions use the ranking and leaderboard tools instead, and if \
+none of them can answer (for example a ranking by phase), say so rather than presenting hits as \
+a ranking.
 - Choose the pool deliberately: "club" for IPL/BBL/CPL/PSL (combined; it cannot be split by \
 league), "intl" for internationals between Full Members, "assoc" for internationals involving \
 an associate nation. If the user does not say, pick the sensible one and state which you used.

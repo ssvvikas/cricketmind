@@ -355,5 +355,70 @@
       "no information"
     ],
     "note": "the data has no commentary, crowd or stage information; it must say so"
+  },
+  {
+    "id": "phase-splits",
+    "question": "How does Kohli's strike rate in the death overs compare with the powerplay?",
+    "expect_tools_any": [
+      "search_facts"
+    ],
+    "must_mention_any": [
+      "death"
+    ],
+    "note": "phase strike rates exist only in the entity index"
+  },
+  {
+    "id": "recent-form",
+    "question": "What has Kohli's batting form been like over his last 10 innings?",
+    "expect_tools_any": [
+      "search_facts"
+    ],
+    "must_mention_any": [
+      "last 10",
+      "ten innings",
+      "recent"
+    ],
+    "note": "recent form is in the batsman record"
+  },
+  {
+    "id": "partnership-record",
+    "question": "What is the best stand Babar Azam and Mohammad Rizwan have shared?",
+    "expect_tools_any": [
+      "search_facts"
+    ],
+    "must_mention_any": [
+      "203"
+    ],
+    "note": "a partnership record"
+  },
+  {
+    "id": "bowler-phase-economy",
+    "question": "What is Bumrah's economy in the powerplay versus the death overs?",
+    "expect_tools_any": [
+      "search_facts"
+    ],
+    "must_mention_any": [
+      "death"
+    ]
+  },
+  {
+    "id": "phase-ranking-honesty",
+    "question": "Who has the best death-overs strike rate in T20 cricket?",
+    "must_mention_any": [
+      "can't rank",
+      "cannot rank",
+      "can't tell",
+      "cannot tell",
+      "no tool",
+      "don't have",
+      "not able to rank",
+      "unable to rank",
+      "can't say",
+      "cannot say",
+      "doesn't",
+      "does not",
+      "no way to"
+    ],
+    "note": "no tool ranks by phase and similarity search cannot rank by a statistic: the assistant must say so instead of presenting retrieved hits as 'the best'"
   }
 ]

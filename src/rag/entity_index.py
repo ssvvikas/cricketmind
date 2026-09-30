@@ -315,28 +315,63 @@ def spot_names(question: str, players: dict[str, float], teams, by_surname=None)
             if parts:
                 by_surname.setdefault(parts[-1], []).append(name)
     tokens = re.findall(r"[A-Za-z][A-Za-z'.\-]*", q)
-    found_players: list[str] = []
-    for i, tok in enumerate(tokens):
-        low = re.sub(r"[^a-z]", "", tok.lower())
+    lows = [re.sub(r"[^a-z]", "", t.lower()) for t in tokens]
+
+    def cands_for(i):
+        low = lows[i]
         if len(low) < 3 or low in _NOT_SURNAMES or low not in by_surname:
+            return None
+        return by_surname[low]
+
+    def given_evidence(i, cand):
+        """Is the word before token i plausibly this candidate's first name or initials?"""
+        prev = tokens[i - 1]
+        initials_style = prev.isalpha() and prev.isupper() and len(prev) <= 3  # "AS", "MS", "RG"
+        if not initials_style and (lows[i - 1] in _NOT_SURNAMES or not lows[i - 1]):
+            return False  # "about Sharma": 'about' is not a first name (but "AS Khan" is)
+        given = "".join(_norm(cand).split()[:-1])
+        if given and given == lows[i - 1]:
+            return True  # the exact first name, in any case ("rashid khan")
+        # initials in the data ("V Kohli", "RG Sharma") vs a first name in the question: only
+        # when it is written like a name, so a filler word cannot pick players by its first letter
+        return prev[0].isupper() and score_name(f"{prev} {tokens[i]}", cand) >= 0.95
+
+    found_players: list[str] = []
+    ambiguous: list[str] = []  # surnames that still matched several players
+    handled: set[int] = set()  # token positions already explained (surnames and their first names)
+
+    def add(names):
+        for n in names:
+            if n not in found_players:
+                found_players.append(n)
+
+    # pass 1: "first name / initials + surname" pins down one player, and its first-name word is
+    # then not mistaken for somebody else's surname ("Babar Azam" must not summon "Zulfiqar Babar")
+    for i in range(1, len(tokens)):
+        cands = cands_for(i)
+        if not cands:
             continue
-        cands = by_surname[low]
-        prev = tokens[i - 1] if i else ""
-        with_given = [c for c in cands if prev and score_name(f"{prev} {tok}", c) >= 0.95]
+        with_given = [c for c in cands if given_evidence(i, c)]
         if with_given:
-            chosen = with_given
-        elif low in WORDLIKE_SURNAMES and not tok[0].isupper():
+            add(with_given)
+            handled |= {i, i - 1}
+
+    # pass 2: a surname on its own
+    for i in range(len(tokens)):
+        cands = cands_for(i)
+        if not cands or i in handled:
+            continue
+        if lows[i] in WORDLIKE_SURNAMES and not tokens[i][0].isupper():
             continue  # "head", "short"... in lower case is an ordinary word
-        else:
-            chosen = sorted(cands, key=lambda n: -players[n])[:MAX_NAME_CANDIDATES]
-            # an obscure namesake must not hijack the obvious player ("Kohli" is V Kohli, not the
-            # 19-ball T Kohli): keep only the leader if it has DOMINANCE x the next one's data
-            if len(chosen) > 1 and players[chosen[0]] >= DOMINANCE * players[chosen[1]]:
-                chosen = chosen[:1]
-        for c in chosen:
-            if c not in found_players:
-                found_players.append(c)
-    return {"players": found_players, "teams": found_teams}
+        chosen = sorted(cands, key=lambda n: -players[n])[:MAX_NAME_CANDIDATES]
+        # an obscure namesake must not hijack the obvious player ("Kohli" is V Kohli, not the
+        # 19-ball T Kohli): keep only the leader if it has DOMINANCE x the next one's data
+        if len(chosen) > 1 and players[chosen[0]] >= DOMINANCE * players[chosen[1]]:
+            chosen = chosen[:1]
+        if len(chosen) > 1:
+            ambiguous.append(tokens[i])
+        add(chosen)
+    return {"players": found_players, "teams": found_teams, "ambiguous": ambiguous}
 
 
 def _name_in(text: str, name: str) -> bool:
@@ -448,6 +483,8 @@ def retrieve(question: str, top_k: int = 5, entity_type: str | None = None,
                    "statistic. For 'best', 'most' or 'highest' questions use the ranking and "
                    "leaderboard tools: these hits are not ordered by the statistic.")
     return {"question": question, "entity_type": entity_type, "filtered_by": wanted,
+            "named": {"players": names["players"], "teams": names["teams"]},
+            "ambiguous_surnames": names["ambiguous"],
             "name_filtered": filtered, "intent": sorted(intent), "hits": hits,
             **({"warning": warning} if warning else {}),
             **({"note": "No chunk mentions the name(s) found in the question; showing plain "

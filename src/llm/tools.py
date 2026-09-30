@@ -10,6 +10,7 @@ so a model can recover from a bad argument.
 """
 
 import difflib
+import importlib
 import json
 import re
 from pathlib import Path
@@ -47,9 +48,12 @@ from src.names import (  # noqa: E402,F401  (re-exported: tests and callers impo
 class Toolbox:
     """Lazily loads ratings / models and exposes the tools."""
 
-    def __init__(self, db_path: str | None = None, model_dir=None, book: RatingBook | None = None):
+    def __init__(self, db_path: str | None = None, model_dir=None, book: RatingBook | None = None,
+                 entity_dir=None, entity_embed_fn=None):
         self.db_path = db_path or str(DB_PATH)
         self.model_dir = model_dir or MODEL_DIR
+        self.entity_dir = entity_dir  # ChromaDB folder for search_facts (default data/embeddings)
+        self.entity_embed_fn = entity_embed_fn  # tests inject a fake; None = the real model
         self._book = book
         self._fielding: pd.DataFrame | None = None
         self._teams: dict[str, set[str]] | None = None
@@ -421,6 +425,54 @@ class Toolbox:
                 "and rain-shortened matches are excluded from ball-based tags.")
         return res
 
+    # ── stored records (retrieval over the feature tables) ────────────
+    def search_facts(self, question: str, entity_type: str | None = None, top_k: int = 5) -> dict:
+        """Stored records about the players / teams / pairs a question names, as text."""
+        try:  # imported lazily: chromadb and fastembed are only needed for this tool
+            EI = importlib.import_module("src.rag.entity_index")
+        except ImportError:
+            raise ValueError("Entity search needs chromadb and fastembed: "
+                             "pip install -e '.[rag]'") from None
+        try:
+            res = EI.retrieve(question, top_k=min(int(top_k), 10), entity_type=entity_type,
+                              persist_dir=self.entity_dir, embed_fn=self.entity_embed_fn)
+        except RuntimeError as e:  # index not built / no embedding model
+            raise ValueError(str(e)) from None
+        out = {
+            "question": res["question"], "named": res["named"],
+            "name_filtered": res["name_filtered"], "intent": res["intent"],
+            "hits": [{k: h[k] for k in ("entity_type", "entity_name", "league", "score", "text")}
+                     for h in res["hits"]],
+        }
+        if "note" in res:
+            out["note"] = res["note"]
+        types = {h["entity_type"] for h in res["hits"]}
+        caveats = [
+            "These are stored records from the aggregate tables, returned as text. Player figures "
+            "combine IPL, BBL, CPL, PSL and T20 internationals (use batting_stats / bowling_stats "
+            "for a league or season), and they are raw: not adjusted for era, phase or opposition.",
+            "Retrieval finds records that resemble the question; it does not rank players by a "
+            "statistic, so do not present these hits as 'the best' or 'the most'.",
+            S.COVERAGE,
+        ]
+        if res["ambiguous_surnames"]:
+            who = ", ".join(res["named"]["players"])
+            caveats.append(f"The name {', '.join(res['ambiguous_surnames'])} matched several "
+                           f"players ({who}); ask the user which one they mean if it matters.")
+        if "warning" in res:
+            caveats.append(res["warning"])
+        if "matchup" in types:
+            caveats.append("Matchup records are small samples and did not predict future balls "
+                           "better than league averages: quote them as history, not a forecast.")
+        if "fielding" in types:
+            caveats.append("Fielding counts measure involvement in dismissals and reflect role "
+                           "(keepers, slip fielders) as much as skill.")
+        if "partnership" in types:
+            caveats.append("Partnership figures are raw records: a pair's own history did not "
+                           "predict its future scoring beyond the two batters' individual ratings.")
+        out["caveats"] = caveats
+        return out
+
     # ── dispatch ────────────────────────────────────────────────────
     def call(self, name: str, arguments: dict | str | None = None) -> dict:
         """Run a tool by name.  Never raises: failures come back as {'error': ...}."""
@@ -569,4 +621,21 @@ TOOL_SPECS.append(_spec(
      "tags": {"type": "array", "items": {"type": "string", "enum": list(TAGS)}},
      "sort": {"type": "string", "enum": list(SORTS)},
      "top": {"type": "integer", "minimum": 1, "maximum": 25}}, []))
+
+TOOL_SPECS.append(_spec(
+    "search_facts",
+    "Look up stored records about the players, teams or pairs a question names and return them as "
+    "text. Use it for what no other tool returns: batting strike rate by phase (powerplay / "
+    "middle / death), recent form over the last 10 innings, bowling economy by phase, partnership "
+    "records (best stand, 50+ stands), team scoring rates, and general 'tell me about X' "
+    "questions. Pass the question with the names as typed. It finds records that resemble the "
+    "question and cannot rank players by a statistic: for 'best' or 'most' use the ranking and "
+    "leaderboard tools.",
+    {"question": {"type": "string"},
+     "entity_type": {"type": "string",
+                     "enum": ["batsman", "bowler", "team", "partnership", "fielding", "matchup"],
+                     "description": "Optional: restrict to one kind of record."},
+     "top_k": {"type": "integer", "minimum": 1, "maximum": 10}},
+    ["question"]))
 TOOL_NAMES = {s["name"] for s in TOOL_SPECS}
+
