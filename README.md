@@ -20,21 +20,25 @@ CricketMind answers five core questions about T20 cricket:
 User Question
      │
      ▼
-┌─────────────┐     ┌──────────────┐     ┌──────────────┐
-│  RAG Layer  │────▶│  ML Models   │────▶│ Fine-tuned   │
-│ (ChromaDB)  │     │ (XGBoost,    │     │ LLM (Qwen/   │
-│ Historical  │     │  LightGBM,   │     │ Llama 3B     │
-│ stats       │     │  K-Means)    │     │ + LoRA)      │
-└─────────────┘     └──────────────┘     └──────────────┘
-                                               │
-                                               ▼
-                                    Natural Language Answer
-                                    with supporting numbers
+┌──────────────────┐   tool calls   ┌────────────────────────────────┐
+│ Claude assistant │───────────────▶│ Tools (read-only, with caveats)│
+│ (agent loop)     │◀───────────────│                                │
+└──────────────────┘   results      │  ratings, matchups, pairs      │
+     │                              │  team-strength model (XGBoost) │
+     ▼                              │  counting stats, leaderboards  │
+Natural-language answer             │  match search (hybrid RAG)     │
+with numbers from the tools         └────────────────────────────────┘
+                                                    │
+                                                    ▼
+                                      DuckDB over Cricsheet ball-by-ball
 ```
 
-- **Classical ML** does the predictions (fast, accurate on tabular data)
-- **Fine-tuned LLM** generates insights in natural language
-- **RAG pipeline** grounds everything in real Cricsheet data
+- **Backtested models and plain statistics** produce every number (each was tested, and the
+  ones that carried no signal were removed)
+- **The assistant** chooses tools, passes on their caveats, and never states a figure a tool
+  did not return (checked by a deterministic eval)
+- **Match search** finds matches by tags, filters and description over generated summaries
+- Fine-tuning a local model was deferred: the eval shows no gap that prompting cannot close
 
 ## Data
 
@@ -158,6 +162,7 @@ name / description / input_schema shape).
 | `leaderboard` | Orange/Purple Cap style tables (runs, wickets, sixes, fours, strike rate, economy, ...) |
 | `team_record`, `standings` | Win/loss records, team head-to-heads, season tables |
 | `venue_stats` | Average scores and chasing record at a ground |
+| `search_matches` | Find matches by tags / filters / description ("last-ball finishes at Chinnaswamy", "biggest chases") with exact counts |
 
 The counting stats are plain facts using standard definitions (average = runs / dismissals, run-outs
 are not the bowler's, wides are not balls faced) and were checked against well-known figures, e.g.
@@ -176,7 +181,7 @@ pip install -e ".[agent]"                 # the anthropic SDK
 export ANTHROPIC_API_KEY=...              # or `ant auth login`
 python -m src.models.team_strength        # once: trains the match model
 python -m src.llm.agent "Who should open the bowling to Kohli in the powerplay?"
-python eval/run_eval.py                   # 23 honesty / tool-use checks against the live model
+python eval/run_eval.py                   # 28 honesty / tool-use checks against the live model
 ```
 
 The agent loop is a manual tool-use loop on `claude-opus-5-5` (effort `medium`, all parallel tool
@@ -189,6 +194,49 @@ trigger a question, unknown players get no invented numbers.
 **Status:** unit-tested offline (a scripted fake client stands in for the API). The original 14
 live eval cases passed (13/14 on the first run; the one failure was an over-strict check, since
 fixed). The stat-tool cases added afterwards have not yet been run live.
+
+## Match search (Phase 4, retrieval)
+
+The data has no commentary or match reports, so there is no text to embed in the usual sense. The
+RAG layer instead generates one **summary per match** (6,262 of them) from the ball-by-ball data:
+result and margin, both innings, top performers, player of the match, centuries and five-wicket
+hauls, plus derived **tags** (last-ball finish, close finish, thumping win, big chase, collapse,
+century, super over, rain-affected, awarded, ...). Every sentence comes from a computed field,
+and the fields are returned with each hit so answers can cite them.
+
+`search_matches` is a hybrid: exact filters (league, season, team, opponent, player, venue,
+tags) and a sort (`biggest_chase`, `closest`, `highest_total`, ...), then free-text ranking that
+fuses TF-IDF with dense embeddings (`BAAI/bge-small-en-v1.5` via `fastembed`, ONNX, no PyTorch).
+It also returns `matched_total`, so "how many last-ball finishes are there?" is an exact count.
+
+```bash
+pip install -e ".[rag]"
+python -m src.rag.retriever          # builds summaries + index (~3 min, mostly embedding)
+python eval/audit_corpus.py          # every tag and figure checked against independent SQL
+python eval/run_retrieval_eval.py    # retrieval quality vs ground truth
+```
+
+**Correctness.** `eval/audit_corpus.py` recomputes all 16 tags, every innings total and every
+century with plain SQL and compares match by match; it found and fixed three real bugs (a null
+winner treated as a winner, margins derived for awarded matches, and D/L / awarded matches
+handled inconsistently).
+
+**Retrieval quality** (precision@10 over 32 free-text queries; random picking scores 0.08):
+
+| Query group | Keyword only | Hybrid |
+|---|---:|---:|
+| Worded like the indexed tag synonyms (12) | 0.92 | 0.92 |
+| Paraphrases used while developing (10) | 0.48 | 0.66 |
+| Held-out paraphrases, never tuned on (10) | 0.69 | 0.82 |
+
+Embeddings were only added because keyword search measurably failed on paraphrases ("went down to
+the wire" found nothing). ChromaDB was not used: 6,262 documents fit in a 26 MB pickle. The
+assistant is told to prefer tags and filters for precise questions and to check each hit's facts,
+because free-text ranking is still wrong about one time in five.
+
+**Limits.** These are generated summaries, not commentary: no stories, quotes, crowd or
+"final / semi-final" information (the source does not record the stage). Margins are the
+official ones where present; awarded and rain-shortened matches are excluded from ball-based tags.
 
 ## Quick Start
 
@@ -225,7 +273,7 @@ cricketmind/
 │   │   └── bowling_matchup.py  # Raw head-to-head facts (descriptive only)
 │   ├── models/              # ML model training (Phase 2)
 │   ├── llm/                 # LLM fine-tuning (Phase 3)
-│   ├── rag/                 # RAG pipeline (Phase 4)
+│   ├── rag/                 # Match summaries, tags and hybrid search (Phase 4)
 │   └── api/                 # FastAPI endpoints (Phase 5)
 ├── tests/                   # pytest test suite
 ├── pyproject.toml           # Project config + dependencies
@@ -234,7 +282,7 @@ cricketmind/
 
 ## Tech Stack
 
-Python 3.11+ · DuckDB · XGBoost · Hugging Face (Transformers + PEFT) · ChromaDB · FastAPI · Docker
+Python 3.11+ · DuckDB · XGBoost · scikit-learn · fastembed (ONNX) · Claude API (tool use) · FastAPI · Docker
 
 ## Status
 
@@ -242,7 +290,7 @@ Python 3.11+ · DuckDB · XGBoost · Hugging Face (Transformers + PEFT) · Chrom
 - [x] Phase 1.5: Direct Cricsheet ingestion (BBL, CPL, PSL)
 - [x] Phase 2: ML models (team strength: strong for T20I, ~coin flip for club leagues; player ratings, matchups, pairs and fielding backtested and simplified)
 - [ ] Phase 3: LLM layer (tools + agent + eval built and tested offline; live run and any fine-tuning outstanding)
-- [ ] Phase 4: RAG pipeline
+- [x] Phase 4: RAG pipeline (match summaries + hybrid search; the search eval cases have not yet been run live)
 - [ ] Phase 5: API + frontend
 - [ ] Phase 6: Polish + deploy
 

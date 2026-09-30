@@ -12,6 +12,7 @@ from src.ingestion.cricsheet_json import ingest_cricsheet
 from src.ingestion.download import download_all
 from src.ingestion.load_db import create_database, print_summary
 from src.models.player_ratings import RatingBook, load_balls
+from src.rag.retriever import build_index
 
 
 def run_phase1(skip_download: bool = False) -> None:
@@ -55,6 +56,10 @@ def run_phase1(skip_download: bool = False) -> None:
     # Step 4: era/phase-adjusted player ratings (the ranking used downstream)
     logger.info("Step 4: Computing player ratings...")
     RatingBook(load_balls()).save()
+
+    # Step 5: searchable match summaries for the assistant's retrieval tool
+    logger.info("Step 5: Building the match search index...")
+    build_index()
 
     logger.success("=== Phase 1 complete! ===")
     logger.info(f"  Batsmen:      {len(batsman_df):,}")

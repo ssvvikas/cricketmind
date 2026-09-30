@@ -21,6 +21,8 @@ import pandas as pd
 
 from src.config import DB_PATH, TEAM_ALIASES
 from src.llm import stats as S
+from src.rag.corpus import TAG_DEFINITIONS, TAGS, build_corpus
+from src.rag.retriever import INDEX_PATH, SORTS, MatchIndex
 from src.features.bowling_matchup import head_to_head as _head_to_head
 from src.features.fielding import compute_fielding_features
 from src.models.player_ratings import PHASES, RatingBook, load_balls
@@ -108,8 +110,19 @@ class Toolbox:
         self._fielding: pd.DataFrame | None = None
         self._teams: dict[str, set[str]] | None = None
         self._con = None
+        self._index: MatchIndex | None = None
 
     # -- lazy loaders
+    @property
+    def match_index(self) -> MatchIndex:
+        """Search index over the generated match summaries (cached on disk for the real DB)."""
+        if self._index is None:
+            if self.db_path == str(DB_PATH) and INDEX_PATH.exists():
+                self._index = MatchIndex.load()
+            else:
+                self._index = MatchIndex(build_corpus(self.db_path))
+        return self._index
+
     @property
     def con(self):
         """Read-only DuckDB connection used by the counting-stat tools."""
@@ -428,6 +441,42 @@ class Toolbox:
         """Scoring and chasing record at a ground (name search, e.g. 'Wankhede')."""
         return S.venue_stats(self.con, venue, league)
 
+    # ── match search (retrieval over generated match summaries) ───────
+    def search_matches(self, query: str | None = None, league: str | None = None,
+                       season: str | None = None, team: str | None = None,
+                       opponent: str | None = None, player: str | None = None,
+                       venue: str | None = None, tags: list[str] | None = None,
+                       sort: str | None = None, top: int = 8) -> dict:
+        """Find matches by filters, tags and/or a free-text description."""
+        if league and league not in LEAGUES:
+            raise ValueError(f"league must be one of {LEAGUES}")
+        res = self.match_index.search(
+            query, league=league, season=season,
+            team=self._any_team(team, league) if team else None,
+            opponent=self._any_team(opponent, league) if opponent else None,
+            player=self._any_player(player) if player else None,
+            venue=venue, tags=tags, sort=sort, top=top)
+        res["tag_definitions"] = {t: TAG_DEFINITIONS[t] for t in (tags or [])}
+        res["caveats"] = [
+            "Summaries are generated from the ball-by-ball data, not written commentary; there "
+            "are no stories, quotes or stage information (the data does not say which match was "
+            "a final).",
+            "matched_total is exact for filters and tags. Free-text ranking is a keyword + "
+            "embedding blend that is right most of the time but not always (about 3 in 4 of the "
+            "top 10 on unfamiliar phrasings), so check that each hit's own facts fit the "
+            "question; prefer filters and tags for precise questions.",
+            S.COVERAGE,
+        ]
+        if res.get("ranking") == "keyword":
+            res["caveats"].append("The embedding model was unavailable, so this used keyword "
+                                  "matching only; paraphrases may be missed.")
+        if any(t in ("last-ball finish", "close finish", "thumping win", "big chase")
+               for t in (tags or [])) or sort in ("closest", "biggest_chase", "biggest_win"):
+            res["caveats"].append(
+                "Margins are the official ones where the source has them (D/L-aware); awarded "
+                "and rain-shortened matches are excluded from ball-based tags.")
+        return res
+
     # ── dispatch ────────────────────────────────────────────────────
     def call(self, name: str, arguments: dict | str | None = None) -> dict:
         """Run a tool by name.  Never raises: failures come back as {'error': ...}."""
@@ -558,4 +607,22 @@ TOOL_SPECS += [
           "and second-innings scores, highest total and how often the team batting first wins.",
           {"venue": {"type": "string"}, "league": _LEAGUE}, ["venue"]),
 ]
+TOOL_SPECS.append(_spec(
+    "search_matches",
+    "Find matches: structured filters plus tags plus optional free text. Use for questions like "
+    "'last-ball finishes at Chinnaswamy', 'highest successful chases' (sort=biggest_chase), "
+    "'closest IPL finishes' (sort=closest), 'Kohli's centuries' (player + tags=['century']), "
+    "or 'high-scoring matches involving CSK'. Returns matched_total (exact count) and the top "
+    "hits with facts. Tags: " + "; ".join(TAGS) + ". Prefer tags/filters over free text.",
+    {"query": {"type": "string", "description": "Optional free-text description; ranks the "
+               "matches that pass the filters."},
+     "league": _LEAGUE, "season": _SEASON,
+     "team": {"type": "string"}, "opponent": {"type": "string"},
+     "player": {"type": "string", "description": "Someone notable in the match (30+ runs, 2+ "
+                "wickets, player of the match); with tags century / five-wicket haul, the player "
+                "who did it."},
+     "venue": {"type": "string", "description": "Ground or city name search."},
+     "tags": {"type": "array", "items": {"type": "string", "enum": list(TAGS)}},
+     "sort": {"type": "string", "enum": list(SORTS)},
+     "top": {"type": "integer", "minimum": 1, "maximum": 25}}, []))
 TOOL_NAMES = {s["name"] for s in TOOL_SPECS}

@@ -288,5 +288,60 @@
       "only includes"
     ],
     "note": "the data covers only IPL, BBL, CPL, PSL and T20Is"
+  },
+  {
+    "id": "last-ball-finishes",
+    "question": "Which IPL matches were decided on the last ball, and how many have there been?",
+    "expect_tools_any": [
+      "search_matches"
+    ],
+    "must_mention_any": [
+      "last ball",
+      "last-ball",
+      "final ball"
+    ],
+    "note": "needs the exact matched_total, not a guess"
+  },
+  {
+    "id": "biggest-chase",
+    "question": "What is the biggest successful run chase in IPL history?",
+    "expect_tools_any": [
+      "search_matches"
+    ],
+    "must_mention_any": [
+      "265"
+    ],
+    "note": "sort=biggest_chase"
+  },
+  {
+    "id": "kohli-centuries",
+    "question": "In which IPL matches did Kohli score a century?",
+    "expect_tools_any": [
+      "search_matches"
+    ],
+    "note": "player + century tag: the player must be the scorer, not merely present"
+  },
+  {
+    "id": "paraphrase-search",
+    "question": "Find me some matches at Eden Gardens that went down to the wire.",
+    "expect_tools_any": [
+      "search_matches"
+    ],
+    "note": "a paraphrase; the assistant should map it to the close-finish tag or the text query"
+  },
+  {
+    "id": "no-narrative",
+    "question": "Describe the atmosphere in the crowd at the 2011 IPL final.",
+    "must_mention_any": [
+      "can't",
+      "cannot",
+      "don't have",
+      "no commentary",
+      "not in the data",
+      "doesn't include",
+      "does not include",
+      "no information"
+    ],
+    "note": "the data has no commentary, crowd or stage information; it must say so"
   }
 ]
