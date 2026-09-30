@@ -140,6 +140,43 @@ head-to-head is exposed only as a fact (`head_to_head`). The Phase 1 `rank_score
 `legacy_score`), `vulnerability_score`, `chemistry_score` and `fielding_score` were removed or
 demoted because of these results.
 
+## Assistant (Phase 3, tools first)
+
+The assistant is Claude wired to a set of read-only tools (`src/llm/tools.py`) that wrap the
+backtested models, so every number it quotes comes from a tested function. Fine-tuning a local
+model is deferred; the tool layer is model-agnostic (`TOOL_SPECS` uses the standard
+name / description / input_schema shape).
+
+| Tool | Answers |
+|---|---|
+| `find_player`, `find_team` | "Virat Kohli" -> `V Kohli`, "RCB" -> Royal Challengers Bengaluru; ambiguous names ("Sharma") are refused with candidates |
+| `player_profile`, `rank_batters`, `rank_bowlers` | Ratings, ranks and sample sizes per pool |
+| `matchup`, `recommend_bowlers` | Phase-aware expected runs per over and dismissal chance |
+| `best_pairs`, `head_to_head`, `fielding_profile` | Pair strength, raw records, dismissals per match |
+| `predict_match` | Win probability; club leagues are labelled "very low (near coin flip)" |
+
+Honesty is built in: each result carries `caveats` (small samples, associate-nation pools,
+head-to-head not predictive, keeper-driven fielding numbers) and the system prompt tells the
+model to pass them on and to state nothing that a tool did not return.
+
+```bash
+pip install -e ".[agent]"                 # the anthropic SDK
+export ANTHROPIC_API_KEY=...              # or `ant auth login`
+python -m src.models.team_strength        # once: trains the match model
+python -m src.llm.agent "Who should open the bowling to Kohli in the powerplay?"
+python eval/run_eval.py                   # 14 honesty / tool-use checks against the live model
+```
+
+The agent loop is a manual tool-use loop on `claude-opus-5-5` (effort `medium`, all parallel tool
+results returned in one message, assistant turns kept unchanged). Server-side refusal fallbacks
+(`fallbacks: "default"`) are on by default and can be turned off with `refusal_fallbacks=False`.
+`eval/` scores answers deterministically: the right tool was called, every decimal or percentage
+in the answer appears in a tool result, club predictions are called coin flips, ambiguous names
+trigger a question, unknown players get no invented numbers.
+
+**Status:** the tool layer, agent loop and eval checks are unit-tested offline (a scripted fake
+client stands in for the API). The live API path and the eval have not yet been run.
+
 ## Quick Start
 
 ```bash
@@ -191,7 +228,7 @@ Python 3.11+ · DuckDB · XGBoost · Hugging Face (Transformers + PEFT) · Chrom
 - [x] Phase 1: Data foundation + feature engineering (IPL + T20I)
 - [x] Phase 1.5: Direct Cricsheet ingestion (BBL, CPL, PSL)
 - [x] Phase 2: ML models (team strength: strong for T20I, ~coin flip for club leagues; player ratings, matchups, pairs and fielding backtested and simplified)
-- [ ] Phase 3: LLM fine-tuning
+- [ ] Phase 3: LLM layer (tools + agent + eval built and tested offline; live run and any fine-tuning outstanding)
 - [ ] Phase 4: RAG pipeline
 - [ ] Phase 5: API + frontend
 - [ ] Phase 6: Polish + deploy
