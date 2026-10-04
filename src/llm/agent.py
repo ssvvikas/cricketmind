@@ -116,13 +116,27 @@ class CricketAgent:
         return self.client.messages.create(**params)
 
     # ── the loop ────────────────────────────────────────────────────
-    def ask(self, question: str) -> AgentResult:
-        """Answer one question, continuing any earlier conversation."""
+    def ask(self, question: str, on_event=None) -> AgentResult:
+        """Answer one question, continuing any earlier conversation.
+
+        ``on_event(dict)`` is called with progress events - ``{"type": "step", "n": k}`` before
+        each model call, ``{"type": "tool_call", "name", "arguments"}`` and
+        ``{"type": "tool_result", "name", "ok"}`` around each tool - so a UI can show what the
+        assistant is doing.  An exception in the callback never affects the answer.
+        """
+        def emit(event: dict) -> None:
+            if on_event is not None:
+                try:
+                    on_event(event)
+                except Exception:  # a broken listener must not break the answer
+                    pass
+
         start = len(self.messages)  # where this question begins, for rollback on refusal
         self.messages.append({"role": "user", "content": question})
         result = AgentResult(text="")
 
         for step in range(1, self.max_steps + 1):
+            emit({"type": "step", "n": step})
             response = self._create()
             result.steps = step
             usage = getattr(response, "usage", None)
@@ -153,7 +167,9 @@ class CricketAgent:
             # run every tool the model asked for; all results go back in ONE user message
             tool_results = []
             for block in (b for b in response.content if b.type == "tool_use"):
+                emit({"type": "tool_call", "name": block.name, "arguments": dict(block.input)})
                 out = self.toolbox.call(block.name, block.input)
+                emit({"type": "tool_result", "name": block.name, "ok": "error" not in out})
                 result.tool_calls.append(ToolCall(block.name, dict(block.input), out))
                 tool_results.append({
                     "type": "tool_result", "tool_use_id": block.id,

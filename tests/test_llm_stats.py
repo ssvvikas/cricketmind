@@ -90,6 +90,15 @@ class TestLeaderboards:
         with pytest.raises(S.NoData):
             S.leaderboard(con, "economy", min_balls=100_000)
 
+    def test_tied_players_come_out_in_a_fixed_order(self, con):
+        """p2 and p4 both have 18 runs: the order must not depend on how the query ran."""
+        rows = S.leaderboard(con, "runs", "IPL", "2024", top=4)["rows"]
+        assert [(r["player"], r["value"]) for r in rows] == [
+            ("p1", 402.0), ("p3", 378.0), ("p2", 18.0), ("p4", 18.0)]  # ties by name
+        eco = S.leaderboard(con, "wickets", top=4)["rows"]
+        assert [r["player"] for r in eco if r["value"] == 0.0] == sorted(
+            r["player"] for r in eco if r["value"] == 0.0)
+
     def test_rate_stats_say_who_qualifies(self, con):
         r = S.leaderboard(con, "strike_rate", min_balls=100)
         assert any("at least 100 balls" in c for c in r["caveats"])

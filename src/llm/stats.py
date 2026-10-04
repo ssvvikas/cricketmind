@@ -238,7 +238,7 @@ def leaderboard(con, stat: str, league=None, season=None, top: int = 10,
             SELECT player, {agg[0]} AS value, COUNT(*) AS innings, SUM(runs) AS runs,
                    SUM(balls) AS balls
             FROM inn
-            GROUP BY player {having} ORDER BY value {agg[1]}, runs DESC LIMIT {top}""",
+            GROUP BY player {having} ORDER BY value {agg[1]}, runs DESC, player LIMIT {top}""",
                            params + params).df()
     else:
         agg = {"wickets": "SUM(is_bowler_wicket::INT)",
@@ -249,7 +249,7 @@ def leaderboard(con, stat: str, league=None, season=None, top: int = 10,
             SELECT bowler AS player, {agg} AS value, COUNT(DISTINCT b.match_id) AS matches,
                    SUM(is_legal::INT) AS balls
             FROM ball_by_ball b JOIN match_info m USING (match_id)
-            WHERE {where} GROUP BY bowler {having} ORDER BY value {order}, balls DESC
+            WHERE {where} GROUP BY bowler {having} ORDER BY value {order}, balls DESC, bowler
             LIMIT {top}""", params).df()
     if rows.empty:
         raise NoData("No players qualify for these filters")
@@ -333,7 +333,9 @@ def standings(con, league: str, season: str) -> dict:
         GROUP BY team""", [league, *seasons, league, *seasons]).df()
     df["win_percent"] = (df["won"] * 100 / (df["won"] + df["lost"]).replace(0, float("nan"))
                          ).round(1)
-    df = df.sort_values(["won", "win_percent"], ascending=False).reset_index(drop=True)
+    # team name last: tied sides must come out in the same order on every call
+    df = df.sort_values(["won", "win_percent", "team"], ascending=[False, False, True]
+                        ).reset_index(drop=True)
     df.insert(0, "position_by_wins", range(1, len(df) + 1))
     return {"league": league, "season": seasons, "rows": df.to_dict("records"),
             "caveats": _caveats(league, [

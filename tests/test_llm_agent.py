@@ -179,3 +179,32 @@ class TestRequestShape:
         s = A.SYSTEM_PROMPT
         for phrase in ("tool result", "coin flip", "ambiguous", "caveats", "pool"):
             assert phrase in s
+
+
+class TestProgressEvents:
+    def test_events_arrive_in_order_around_each_tool(self):
+        events = []
+        tb = StubToolbox({"matchup": {"error": "ambiguous"}})
+        agent, _ = make(
+            reply(tool_use("a", "find_player", query="Kohli"),
+                  tool_use("b", "matchup", batter="x", bowler="y", pool="club"), stop="tool_use"),
+            reply(text("done")), toolbox=tb)
+        agent.ask("q", on_event=events.append)
+        assert [(e["type"], e.get("name")) for e in events] == [
+            ("step", None), ("tool_call", "find_player"), ("tool_result", "find_player"),
+            ("tool_call", "matchup"), ("tool_result", "matchup"), ("step", None)]
+        assert events[1]["arguments"] == {"query": "Kohli"}
+        assert events[2]["ok"] is True and events[4]["ok"] is False  # the error result is flagged
+        assert [e["n"] for e in events if e["type"] == "step"] == [1, 2]
+
+    def test_a_failing_listener_never_breaks_the_answer(self):
+        def boom(_):
+            raise RuntimeError("listener bug")
+
+        agent, _ = make(reply(tool_use("a", "find_player", query="k"), stop="tool_use"),
+                        reply(text("still answered")))
+        assert agent.ask("q", on_event=boom).text == "still answered"
+
+    def test_no_listener_is_fine(self):
+        agent, _ = make(reply(text("hi")))
+        assert agent.ask("q").text == "hi"

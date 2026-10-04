@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>CricketMind</title>
+  <meta name="description" content="T20 cricket analysis from ball-by-ball data. Every number comes from a tool, and the tools used are shown.">
+  <link rel="stylesheet" href="/static/style.css">
+  <script src="/static/render.js" defer></script>
+  <script src="/static/sse.js" defer></script>
+  <script src="/static/app.js" defer></script>
+</head>
+<body>
+  <header class="top">
+    <div class="brand">
+      <span class="logo" aria-hidden="true">&#127951;</span>
+      <div>
+        <h1>CricketMind</h1>
+        <p class="tag">T20 analysis from ball-by-ball data. Every number comes from a tool.</p>
+      </div>
+    </div>
+    <div class="actions">
+      <span id="status" class="pill" role="status">Connecting&hellip;</span>
+      <button id="new-chat" type="button" class="ghost">New chat</button>
+    </div>
+  </header>
+
+  <main id="main">
+    <section id="welcome" class="welcome">
+      <h2>Ask about players, matchups, matches or teams</h2>
+      <p>IPL, BBL, CPL, PSL and men's T20 internationals. Try one:</p>
+      <div id="examples" class="chips"></div>
+    </section>
+    <ol id="log" class="log" aria-live="polite" aria-relevant="additions"></ol>
+  </main>
+
+  <div class="dock">
+    <form id="token-gate" class="gate" hidden>
+      <label for="token">This server needs an access token</label>
+      <div class="row">
+        <input id="token" type="password" autocomplete="off" spellcheck="false" placeholder="Access token">
+        <button type="submit">Save</button>
+      </div>
+    </form>
+
+    <form id="composer" class="composer" autocomplete="off">
+      <label for="input" class="sr-only">Your question</label>
+      <textarea id="input" rows="1" placeholder="Ask a cricket question&hellip;" enterkeyhint="send"></textarea>
+      <div class="row">
+        <span id="count" class="count" aria-live="off"></span>
+        <button id="send" type="submit">Ask</button>
+      </div>
+    </form>
+    <p class="fine">Club-league match predictions are close to coin flips, and the assistant says so. Conversations are kept in server memory for a short while, then forgotten.</p>
+  </div>
+</body>
+</html>

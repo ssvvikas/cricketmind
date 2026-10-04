@@ -16,6 +16,7 @@ The number of matches that passed the filters is returned with the hits, so "how
 about tagged matches are exact.
 """
 
+import threading
 from collections.abc import Callable
 
 import numpy as np
@@ -31,6 +32,7 @@ INDEX_PATH = CORPUS_PATH  # the index is rebuilt from this file (+ the embedding
 EMBED_MODEL = "BAAI/bge-small-en-v1.5"
 HYBRID_WEIGHT = 0.5  # share of the fused score from embeddings (fixed in advance, not tuned)
 _embedder = None
+_embed_lock = threading.Lock()
 SORTS = ("relevance", "newest", "oldest", "biggest_chase", "highest_total", "biggest_win",
          "closest")
 FACT_FIELDS = ["match_id", "date", "league", "season", "venue", "team1", "team2", "result",
@@ -61,15 +63,18 @@ def default_embed_fn() -> Callable[[list[str]], np.ndarray] | None:
     """The fastembed ONNX model (downloaded on first use), or None if unavailable."""
     global _embedder
     if _embedder is None:
-        try:
-            from fastembed import TextEmbedding
+        with _embed_lock:  # concurrent first requests must not each load the model
+            if _embedder is None:
+                try:
+                    from fastembed import TextEmbedding
 
-            model = TextEmbedding(EMBED_MODEL)
-            _embedder = lambda texts: np.array(list(model.embed(texts, batch_size=64)),  # noqa: E731
-                                               dtype=np.float32)
-        except Exception as e:  # missing package, offline, corrupt cache...
-            logger.warning(f"Embeddings unavailable ({type(e).__name__}); keyword search only")
-            return None
+                    model = TextEmbedding(EMBED_MODEL)
+                    _embedder = lambda texts: np.array(  # noqa: E731
+                        list(model.embed(texts, batch_size=64)), dtype=np.float32)
+                except Exception as e:  # missing package, offline, corrupt cache...
+                    logger.warning(f"Embeddings unavailable ({type(e).__name__}); keyword "
+                                   "search only")
+                    return None
     return _embedder
 
 
@@ -153,15 +158,18 @@ class MatchIndex:
         return (1 - HYBRID_WEIGHT) * z(tf) + HYBRID_WEIGHT * z(em), "hybrid"
 
     # ── ordering ────────────────────────────────────────────────────
-    def _order(self, idx: np.ndarray, query, sort, ranking: str = "hybrid") -> np.ndarray:
+    def _order(self, idx: np.ndarray, query, sort, ranking: str = "hybrid"):
+        """(ordered row indices, {row: relevance}, ranking label).
+
+        Everything is returned, never stored on ``self``: one index is shared by concurrent
+        requests, and per-query state on the instance would let two searches swap results.
+        """
         c = self.corpus.iloc[idx]
-        self.last_ranking = None
         if sort in (None, "relevance") and query:
-            full, self.last_ranking = self.scores(query, ranking)
+            full, label = self.scores(query, ranking)
             score = full[idx]
-            self._last_scores = dict(zip(idx, score))
             order = np.lexsort((-c["date"].astype("int64").to_numpy(), -score))
-            return idx[order]
+            return idx[order], dict(zip(idx, score)), label
         key = {
             "newest": -c["date"].astype("int64").to_numpy().astype(float),
             "oldest": c["date"].astype("int64").to_numpy().astype(float),
@@ -179,8 +187,7 @@ class MatchIndex:
             closeness = np.where(np.isnan(closeness), 1e9, closeness)  # no margin -> last
             key = closeness
         order = np.argsort(key, kind="stable")
-        self._last_scores = {}
-        return idx[order]
+        return idx[order], {}, None
 
     # ── public ──────────────────────────────────────────────────────
     def search(self, query: str | None = None, *, league=None, season=None, team=None,
@@ -198,7 +205,7 @@ class MatchIndex:
             idx = idx[(self.corpus.iloc[idx]["margin_type"] == "runs").to_numpy()]
         if len(idx) == 0:
             raise NoMatches("No matches satisfy those filters for that sort")
-        ordered = self._order(idx, query, sort, ranking)
+        ordered, relevance, label = self._order(idx, query, sort, ranking)
         top = max(1, min(int(top), 25))
         hits = []
         for i in ordered[:top]:
@@ -209,11 +216,11 @@ class MatchIndex:
             hit["five_wicket_hauls"] = list(row["five_wicket_hauls"])
             hit["summary"] = row["text"]
             if query and (sort in (None, "relevance")):
-                hit["relevance"] = round(float(self._last_scores.get(i, 0.0)), 3)
+                hit["relevance"] = round(float(relevance.get(i, 0.0)), 3)
             hits.append(hit)
         out = {"matched_total": int(len(idx)), "returned": len(hits), "hits": hits}
-        if self.last_ranking:
-            out["ranking"] = self.last_ranking
+        if label:
+            out["ranking"] = label
         return out
 
     # ── persistence ─────────────────────────────────────────────────

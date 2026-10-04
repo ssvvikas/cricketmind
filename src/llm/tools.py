@@ -11,6 +11,7 @@ so a model can recover from a bad argument.
 
 import difflib
 import importlib
+import threading
 import json
 import re
 from pathlib import Path
@@ -59,57 +60,104 @@ class Toolbox:
         self._teams: dict[str, set[str]] | None = None
         self._con = None
         self._index: MatchIndex | None = None
+        self._names: dict[str, int] | None = None
+        # One Toolbox serves many concurrent requests (the web API): loads happen once under a
+        # lock, and every thread gets its own DuckDB cursor (a connection is not thread-safe).
+        self._lock = threading.RLock()
+        self._local = threading.local()
 
-    # -- lazy loaders
+    # -- lazy loaders (double-checked under the lock, so concurrent first calls load once)
     @property
     def match_index(self) -> MatchIndex:
         """Search index over the generated match summaries (cached on disk for the real DB)."""
         if self._index is None:
-            if self.db_path == str(DB_PATH) and INDEX_PATH.exists():
-                self._index = MatchIndex.load()
-            else:
-                self._index = MatchIndex(build_corpus(self.db_path))
+            with self._lock:
+                if self._index is None:
+                    if self.db_path == str(DB_PATH) and INDEX_PATH.exists():
+                        self._index = MatchIndex.load()
+                    else:
+                        self._index = MatchIndex(build_corpus(self.db_path))
         return self._index
 
     @property
     def con(self):
-        """Read-only DuckDB connection used by the counting-stat tools."""
-        if self._con is None:
-            self._con = duckdb.connect(self.db_path, read_only=True)
-        return self._con
+        """A DuckDB cursor private to the calling thread (read-only, counting-stat tools)."""
+        cur = getattr(self._local, "cursor", None)
+        if cur is None:
+            with self._lock:
+                if self._con is None:
+                    self._con = duckdb.connect(self.db_path, read_only=True)
+                cur = self._con.cursor()
+            self._local.cursor = cur
+        return cur
 
     @property
     def book(self) -> RatingBook:
         if self._book is None:
-            self._book = RatingBook(load_balls(self.db_path))
+            with self._lock:
+                if self._book is None:
+                    self._book = RatingBook(load_balls(self.db_path))
         return self._book
 
     @property
     def fielding(self) -> pd.DataFrame:
         if self._fielding is None:
-            self._fielding = compute_fielding_features(self.db_path)
+            with self._lock:
+                if self._fielding is None:
+                    self._fielding = compute_fielding_features(self.db_path)
         return self._fielding
 
     @property
     def teams(self) -> dict[str, set[str]]:
         if self._teams is None:
-            con = duckdb.connect(self.db_path, read_only=True)
-            rows = con.execute("""
-                SELECT league, team FROM (
-                    SELECT league, team1 AS team FROM match_info
-                    UNION SELECT league, team2 FROM match_info)""").fetchall()
-            con.close()
-            self._teams = {}
-            for league, team in rows:
-                self._teams.setdefault(league, set()).add(team)
+            with self._lock:
+                if self._teams is None:
+                    con = duckdb.connect(self.db_path, read_only=True)
+                    rows = con.execute("""
+                        SELECT league, team FROM (
+                            SELECT league, team1 AS team FROM match_info
+                            UNION SELECT league, team2 FROM match_info)""").fetchall()
+                    con.close()
+                    teams: dict[str, set[str]] = {}
+                    for league, team in rows:
+                        teams.setdefault(league, set()).add(team)
+                    self._teams = teams
         return self._teams
 
     def _player_names(self) -> dict[str, int]:
-        names: dict[str, int] = {}
-        for idx, col in ((self.book.batters, "batter"), (self.book.bowlers, "bowler")):
-            for (_, name), balls in idx["balls"].items():
-                names[name] = max(names.get(name, 0), int(balls))
-        return names
+        if self._names is None:
+            with self._lock:
+                if self._names is None:
+                    names: dict[str, int] = {}
+                    for idx, col in ((self.book.batters, "batter"), (self.book.bowlers, "bowler")):
+                        for (_, name), balls in idx["balls"].items():
+                            names[name] = max(names.get(name, 0), int(balls))
+                    self._names = names
+        return self._names
+
+    def warmup(self) -> dict:
+        """Load everything now (at server start) so the first request is fast.
+
+        Returns ``{resource: True | "reason it failed"}``; a missing resource is reported, not
+        fatal, because the matching tool then answers with an actionable error.
+        """
+        steps = {
+            "ratings": lambda: self.book,
+            "fielding": lambda: self.fielding,
+            "teams": lambda: self.teams,
+            "match_search": lambda: self.match_index,
+            "entity_search": lambda: self.search_facts("Kohli", top_k=1),
+        }
+        status: dict = {}
+        for name, fn in steps.items():
+            try:
+                fn()
+                status[name] = True
+            except Exception as e:  # report which resource is missing and why
+                status[name] = f"{type(e).__name__}: {e}"
+        status["match_model"] = all((Path(self.model_dir) / f).exists()
+                                    for f in ("team_strength.json", "team_state.pkl"))
+        return status
 
     def _any_player(self, name: str) -> str:
         """Resolve a player name (any pool) or raise an actionable error."""
