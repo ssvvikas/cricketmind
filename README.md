@@ -115,13 +115,13 @@ CI (`.github/workflows/ci.yml`) runs lint and the test suite on every push.
 ## Status
 
 - Data, models, ratings, statistics, search, assistant, API and page are built and tested.
-- **Verified:** the full test suite; a clean clone installing and building from scratch; the real
-  server on real data under concurrent load; the page in a real browser (progress, tool trace,
-  access-token form, rate-limit message, phone layout).
+- **Verified:** the full test suite, also passing in CI on GitHub (lint plus tests); a clean clone
+  installing and building from scratch; the real server on real data under concurrent load; the page
+  in a real browser (progress, tool trace, access-token form, rate-limit message, phone layout).
 - **Not yet verified:** the assistant against the live model through the API (a scripted stand-in
-  chose the tool calls), the Docker image (not built: no Docker on the development machine), and the
-  CI workflow (not yet run on GitHub). The last full live eval run was 27/28; the miss was a wording
-  check, since fixed, and the five `search_facts` cases have not been run live.
+  chose the tool calls) and the Docker image (not built: no Docker on the development machine). The
+  last full live eval run was 27/28; the miss was a wording check, since fixed, and the five
+  `search_facts` cases have not been run live.
 - Not done: fine-tuning a local model (the eval shows no gap that prompting cannot close).
 
 ## License
