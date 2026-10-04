@@ -16,6 +16,7 @@ The number of matches that passed the filters is returned with the hits, so "how
 about tagged matches are exact.
 """
 
+import os
 import threading
 from collections.abc import Callable
 
@@ -24,13 +25,16 @@ import pandas as pd
 from loguru import logger
 from sklearn.feature_extraction.text import TfidfVectorizer
 
-from src.config import PROCESSED_DIR
+from src.config import DATA_DIR, PROCESSED_DIR
 from src.rag.corpus import CORPUS_PATH, TAGS, build_corpus, save_corpus
 
 EMBEDDINGS_PATH = PROCESSED_DIR / "rag" / "match_embeddings.npy"
 INDEX_PATH = CORPUS_PATH  # the index is rebuilt from this file (+ the embeddings) on load
 EMBED_MODEL = "BAAI/bge-small-en-v1.5"
 HYBRID_WEIGHT = 0.5  # share of the fused score from embeddings (fixed in advance, not tuned)
+# fastembed would otherwise cache the model in the OS temp directory, which is cleared now and
+# then (and on every container restart), forcing a 130 MB re-download
+EMBED_CACHE_DIR = os.environ.get("FASTEMBED_CACHE_PATH") or str(DATA_DIR / "fastembed_cache")
 _embedder = None
 _embed_lock = threading.Lock()
 SORTS = ("relevance", "newest", "oldest", "biggest_chase", "highest_total", "biggest_win",
@@ -68,7 +72,7 @@ def default_embed_fn() -> Callable[[list[str]], np.ndarray] | None:
                 try:
                     from fastembed import TextEmbedding
 
-                    model = TextEmbedding(EMBED_MODEL)
+                    model = TextEmbedding(EMBED_MODEL, cache_dir=EMBED_CACHE_DIR)
                     _embedder = lambda texts: np.array(  # noqa: E731
                         list(model.embed(texts, batch_size=64)), dtype=np.float32)
                 except Exception as e:  # missing package, offline, corrupt cache...

@@ -208,3 +208,18 @@ class TestProgressEvents:
     def test_no_listener_is_fine(self):
         agent, _ = make(reply(text("hi")))
         assert agent.ask("q").text == "hi"
+
+
+class TestCostEstimate:
+    def test_known_models_use_list_prices(self):
+        from src.llm.agent import PRICES, estimate_cost
+
+        assert estimate_cost("claude-opus-5-5", 1_000_000, 0) == 4.0
+        assert estimate_cost("claude-opus-5-5", 0, 1_000_000) == 20.0
+        assert estimate_cost("claude-opus-5-5", 50_000, 4_000) == pytest.approx(0.28)
+        assert all(i < o for i, o in PRICES.values())  # output always costs more than input
+
+    def test_an_unknown_model_has_no_estimate(self):
+        from src.llm.agent import estimate_cost
+
+        assert estimate_cost("some-future-model", 10, 10) is None

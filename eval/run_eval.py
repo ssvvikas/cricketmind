@@ -14,7 +14,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from src.llm.agent import CricketAgent  # noqa: E402
+from src.llm.agent import CricketAgent, estimate_cost  # noqa: E402
 from src.llm.eval_checks import check, load_cases  # noqa: E402
 from src.llm.tools import Toolbox  # noqa: E402
 
@@ -46,12 +46,18 @@ def main() -> int:
         print(f"{'PASS' if not fails else 'FAIL'}  {case.id:26s} tools={[c['name'] for c in calls]}")
         for f in fails:
             print(f"        - {f}")
+        cost = estimate_cost(agent.model, result.input_tokens, result.output_tokens)
         rows.append({"id": case.id, "question": case.question, "answer": result.text,
                      "tools": [c["name"] for c in calls], "failures": fails,
-                     "output_tokens": result.output_tokens})
+                     "input_tokens": result.input_tokens, "output_tokens": result.output_tokens,
+                     "estimated_cost_usd": None if cost is None else round(cost, 4)})
         (here / "results.json").write_text(json.dumps(rows, indent=2))  # saved after every case
     (here / "results.json").write_text(json.dumps(rows, indent=2))
     print(f"\n{len(cases) - failed}/{len(cases)} passed")
+    costs = [r["estimated_cost_usd"] for r in rows if r["estimated_cost_usd"] is not None]
+    if costs:
+        print(f"estimated cost at list price: ${sum(costs):.2f} for {len(costs)} cases "
+              f"(${sum(costs) / len(costs):.3f} per question on average)")
     return 1 if failed else 0
 
 

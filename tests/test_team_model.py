@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from src.models.team_dataset import FEATURES, ELO_START, TeamState, build_dataset, elo_expected
+from src.models.team_dataset import ELO_START, FEATURES, TeamState, build_dataset, elo_expected
 from src.models.team_strength import split, symmetrise
 from tests.test_features import db, raw_and_db  # noqa: F401  (fixtures)
 

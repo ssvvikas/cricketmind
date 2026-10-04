@@ -21,6 +21,24 @@ MAX_TOKENS = 16000
 MAX_STEPS = 10  # tool-use rounds per question
 FALLBACK_BETA = "server-side-fallback-2026-07-01"
 
+# List prices in USD per million tokens (input, output), as published in September 2026. Output
+# includes thinking tokens. Check current pricing before relying on these figures.
+PRICES = {
+    "claude-opus-5-5": (4.0, 20.0),
+    "claude-sonnet-5-5": (2.0, 10.0),
+    "claude-fable-5-1": (10.0, 50.0),
+    "claude-haiku-4-5": (1.0, 5.0),
+}
+
+
+def estimate_cost(model: str, input_tokens: int, output_tokens: int) -> float | None:
+    """Approximate USD cost of a request at list price; None for a model with no known price."""
+    if model not in PRICES:
+        return None
+    inp, out = PRICES[model]
+    return (input_tokens * inp + output_tokens * out) / 1_000_000
+
+
 SYSTEM_PROMPT = """You are CricketMind, a T20 cricket analyst. You answer questions about \
 players, matchups, bowling plans, batting pairs, fielding and match outcomes using tools that \
 wrap backtested models over ball-by-ball data (IPL, BBL, CPL, PSL and men's T20 internationals, \

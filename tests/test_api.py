@@ -56,6 +56,18 @@ class TestInfo:
         assert r["status"] == "ok" and r["warmup"] == "skipped" and r["conversations"] == 0
         assert isinstance(r["credentials_in_environment"], bool)
 
+    @pytest.mark.parametrize("warmup,ready", [
+        ("skipped", True),                                      # lazy loading: usable at once
+        ("running", False),                                     # still loading the data
+        ({"ratings": True, "entity_search": False}, True),      # an optional resource is missing
+        ({"ratings": "FileNotFoundError: no data"}, False),     # the core data failed to load
+    ])
+    def test_ready_reflects_whether_the_data_is_loaded(self, warmup, ready):
+        c = client_for(*HELLO)
+        c.app.state.warmup = warmup
+        body = c.get("/api/health").json()
+        assert body["ready"] is ready and body["status"] == "ok"
+
     def test_info_and_health_are_open_even_when_a_token_is_required(self):
         c = client_for(*HELLO, access_token="s3cret")
         assert c.get("/api/info").json()["auth_required"] is True
@@ -69,7 +81,10 @@ class TestChat:
         body = r.json()
         assert r.status_code == 200 and body["answer"] == "Hello from the assistant"
         assert len(body["session_id"]) == 32 and body["new_session"] is True and body["turns"] == 1
-        assert body["tool_calls"] == [] and body["usage"] == {"input_tokens": 100, "output_tokens": 20}
+        assert body["tool_calls"] == []
+        # 100 input + 20 output tokens at the model's list price ($4 / $20 per million)
+        assert body["usage"] == {"input_tokens": 100, "output_tokens": 20,
+                                 "estimated_cost_usd": 0.0008}
 
     def test_the_tools_used_are_reported_with_their_outcome(self):
         tb = StubToolbox({"matchup": {"error": "ambiguous"}})

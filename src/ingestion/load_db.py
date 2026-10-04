@@ -1,9 +1,9 @@
 """Load raw Parquet files into DuckDB and apply league filters."""
 
+from pathlib import Path
+
 import duckdb
 from loguru import logger
-
-from pathlib import Path
 
 from src.config import (
     DB_PATH,

@@ -33,7 +33,7 @@ from pydantic import BaseModel
 from src.api.ratelimit import RateLimiter
 from src.api.sessions import SESSION_ID, SessionStore, StoreFull
 from src.api.settings import EXAMPLES, ApiSettings
-from src.llm.agent import CricketAgent
+from src.llm.agent import CricketAgent, estimate_cost
 from src.llm.tools import TOOL_SPECS, Toolbox
 
 FRONTEND_DIR = Path(__file__).resolve().parents[2] / "frontend"
@@ -74,6 +74,15 @@ def describe_error(exc: Exception) -> tuple[int, str]:
         return 503, "The assistant is not configured: no API credentials were found on the server."
     logger.exception("Unhandled error while answering")
     return 500, "Something went wrong while answering. Please try again."
+
+
+def _cost(session, result) -> float | None:
+    """List-price cost of one answer (None when the agent's model has no known price)."""
+    model = getattr(session.agent, "model", None)
+    if not model:
+        return None
+    cost = estimate_cost(model, result.input_tokens, result.output_tokens)
+    return None if cost is None else round(cost, 5)
 
 
 def create_app(settings: ApiSettings | None = None, toolbox: Toolbox | None = None,
@@ -180,8 +189,11 @@ def create_app(settings: ApiSettings | None = None, toolbox: Toolbox | None = No
             result = session.agent.ask(message, on_event=on_event)
             session.turns += 1
             store.touch(session)
+            cost = _cost(session, result)
+            cost_text = f" cost=${cost:.3f}" if cost is not None else ""
             logger.info(f"chat session={session.id[:8]} turn={session.turns} "
                         f"tools={[c.name for c in result.tool_calls]} steps={result.steps} "
+                        f"tokens={result.input_tokens}+{result.output_tokens}{cost_text} "
                         f"seconds={time.monotonic() - started:.1f}")
             return result
         finally:
@@ -193,7 +205,9 @@ def create_app(settings: ApiSettings | None = None, toolbox: Toolbox | None = No
             "answer": result.text, "stop_reason": result.stop_reason, "steps": result.steps,
             "tool_calls": [{"name": c.name, "arguments": c.arguments, "ok": "error" not in c.result}
                            for c in result.tool_calls],
-            "usage": {"input_tokens": result.input_tokens, "output_tokens": result.output_tokens},
+            "usage": {"input_tokens": result.input_tokens, "output_tokens": result.output_tokens,
+                      # list-price estimate (null for an unknown model); handy for watching spend
+                      "estimated_cost_usd": _cost(session, result)},
         }
 
     # ── endpoints ───────────────────────────────────────────────────
@@ -262,8 +276,12 @@ def create_app(settings: ApiSettings | None = None, toolbox: Toolbox | None = No
 
     @app.get("/api/health")
     def health():
+        warm = app.state.warmup
+        # ready = not still loading, and (if loading finished) the core ratings loaded; a missing
+        # optional resource (say the entity index) only limits one tool, so it does not block
+        ready = warm != "running" and (not isinstance(warm, dict) or warm.get("ratings") is True)
         return {
-            "status": "ok", "warmup": app.state.warmup, "conversations": len(store),
+            "status": "ok", "ready": ready, "warmup": warm, "conversations": len(store),
             # best effort: the SDK can also authenticate through a login profile
             "credentials_in_environment": bool(os.environ.get("ANTHROPIC_API_KEY")
                                                or os.environ.get("ANTHROPIC_AUTH_TOKEN")),

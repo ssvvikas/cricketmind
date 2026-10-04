@@ -6,9 +6,9 @@ optionally recency-weighted average of their runs / outs (batters) or runs / wic
 (bowlers) above that par.
 
 All functions take an ``as_of`` date and use only balls strictly before it, so the same code
-serves live rankings and leak-free backtests.  Ratings are kept in three pools - club leagues, internationals between ICC Full
-Members ("intl") and internationals involving an associate ("assoc") - because players look
-elite against weak opposition.
+serves live rankings and leak-free backtests.  Ratings are kept in three pools - club leagues,
+internationals between ICC Full Members ("intl") and internationals involving an associate
+("assoc") - because players look elite against weak opposition.
 """
 
 import duckdb

@@ -1,0 +1,20 @@
+# docker compose up --build
+# Needs ANTHROPIC_API_KEY and CRICKETMIND_API_ACCESS_TOKEN in your environment or a .env file.
+# NOT run by the author (no Docker on the development machine); see docs/DEPLOYMENT.md.
+services:
+  cricketmind:
+    build: .
+    ports:
+      - "127.0.0.1:8000:8000"   # loopback only: put a TLS-terminating proxy in front to publish it
+    environment:
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:?set ANTHROPIC_API_KEY}
+      # inside a container the server listens on 0.0.0.0, so the token is not optional
+      CRICKETMIND_API_ACCESS_TOKEN: ${CRICKETMIND_API_ACCESS_TOKEN:?set CRICKETMIND_API_ACCESS_TOKEN}
+      CRICKETMIND_API_TRUST_PROXY_HEADERS: ${CRICKETMIND_API_TRUST_PROXY_HEADERS:-false}
+      CRICKETMIND_API_RATE_LIMIT_PER_MINUTE: ${CRICKETMIND_API_RATE_LIMIT_PER_MINUTE:-10}
+    volumes:
+      - cricketmind-data:/app/data
+    restart: unless-stopped
+
+volumes:
+  cricketmind-data:

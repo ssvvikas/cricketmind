@@ -11,9 +11,8 @@ so a model can recover from a bad argument.
 
 import difflib
 import importlib
-import threading
 import json
-import re
+import threading
 from pathlib import Path
 from typing import Any
 
@@ -22,14 +21,15 @@ import numpy as np
 import pandas as pd
 
 from src.config import DB_PATH, TEAM_ALIASES
-from src.llm import stats as S
-from src.rag.corpus import TAG_DEFINITIONS, TAGS, build_corpus
-from src.rag.retriever import INDEX_PATH, SORTS, MatchIndex
 from src.features.bowling_matchup import head_to_head as _head_to_head
 from src.features.fielding import compute_fielding_features
+from src.llm import stats as S
 from src.models.player_ratings import PHASES, RatingBook, load_balls
 from src.models.team_dataset import LEAGUES
-from src.models.team_strength import MODEL_DIR, predict_match as _predict_match
+from src.models.team_strength import MODEL_DIR
+from src.models.team_strength import predict_match as _predict_match
+from src.rag.corpus import TAG_DEFINITIONS, TAGS, build_corpus
+from src.rag.retriever import INDEX_PATH, SORTS, MatchIndex
 
 POOLS = ("club", "intl", "assoc")
 POOL_HELP = (
@@ -44,6 +44,7 @@ from src.names import (  # noqa: E402,F401  (re-exported: tests and callers impo
     resolve,
     score_name,
 )
+
 
 # ── the toolbox ─────────────────────────────────────────────────────────
 class Toolbox:

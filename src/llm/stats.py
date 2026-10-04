@@ -15,8 +15,6 @@ JSON-friendly dict.  Filters: ``league`` (IPL/BBL/CPL/PSL/T20I) and ``season`` (
 
 from typing import Any
 
-import duckdb
-
 LEAGUES = ("IPL", "BBL", "CPL", "PSL", "T20I")
 LEADERBOARD_STATS = ("runs", "wickets", "sixes", "fours", "strike_rate", "economy",
                      "highest_score", "batting_average")

@@ -162,9 +162,9 @@ class TestSSEParser:
         from fastapi.testclient import TestClient
 
         from src.api.app import create_app
+        from src.llm.agent import CricketAgent
         from tests.test_api import settings
         from tests.test_llm_agent import FakeClient, StubToolbox, reply, text, tool_use
-        from src.llm.agent import CricketAgent
 
         app = create_app(settings(), toolbox=StubToolbox(), agent_factory=lambda: CricketAgent(
             toolbox=StubToolbox(), client=FakeClient(

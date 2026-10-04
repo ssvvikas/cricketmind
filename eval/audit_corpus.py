@@ -64,7 +64,8 @@ truth = {
     # margin-based tags use the source's official margins (D/L-aware), like the corpus does
     "close finish": ids(f"""SELECT m.match_id FROM match_info m
         LEFT JOIN inn s ON s.match_id = m.match_id AND s.innings = 2
-        WHERE COALESCE(m.method, '') <> 'Awarded' AND (m.winner_runs BETWEEN 1 AND 5 OR m.winner_wickets BETWEEN 1 AND 2
+        WHERE COALESCE(m.method, '') <> 'Awarded'
+          AND (m.winner_runs BETWEEN 1 AND 5 OR m.winner_wickets BETWEEN 1 AND 2
                OR ({FULL} AND m.winner = s.batting_team AND s.balls = 120
                    AND COALESCE(m.outcome, '') <> 'tie'))"""),
     "thumping win": ids(f"""SELECT m.match_id FROM match_info m
