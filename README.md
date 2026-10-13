@@ -1,7 +1,7 @@
 # CricketMind 🏏
 
 A T20 cricket analyst. Ask it about players, matchups, matches and teams in plain English and it
-answers with numbers that come from backtested models and ball-by-ball data, and it shows which tools
+answers with numbers that come from backtested models and ball by ball data, and it shows which tools
 it used. It also tells you when the honest answer is "this is close to a coin flip".
 
 Covers the IPL, BBL, CPL, PSL and men's T20 internationals (6,262 matches, 1.4 million deliveries,
@@ -18,7 +18,7 @@ results are the main output (details in [docs/RESULTS.md](docs/RESULTS.md)):
 | Who wins an IPL / BBL / CPL / PSL match? | **No better than a coin flip** (50-53%). Squads turn over too much and single T20 matches are mostly luck, so the assistant says so and shrinks its probabilities toward 50% |
 | Rate batters and bowlers | Era- and phase-adjusted ratings that predict next-year form (rank correlation 0.30 for club batting), but no better than raw strike rate / economy |
 | Do batting pairs have "chemistry"? | **No.** A pair's own history predicts its future scoring *worse* than the two batters' individual ratings |
-| Does head-to-head history predict a matchup? | **No.** Adding it made predictions worse at every setting tried |
+| Does head to head history predict a matchup? | **No.** Adding it made predictions worse at every setting tried |
 | Who is the best fielder? | **Not measurable**: the data has no positions, chances or drops. Dismissal counts mostly reflect role (keepers) |
 | Do wickets persist year to year? | Barely (0.06 to 0.11): rank bowlers by runs saved, not wickets |
 
@@ -45,7 +45,7 @@ tool calls behind it                │  match search + entity search  │
 - **Every number comes from a tool.** The assistant is told never to state a figure a tool did not
   return, and a deterministic eval checks it (every decimal in an answer must appear in a tool result).
 - **Caveats travel with the numbers**: small samples, associate-nation opposition, keeper-driven
-  fielding counts, near-coin-flip club predictions.
+  fielding counts, near coin flip club predictions.
 - **Search over generated summaries**: one summary per match with derived tags ("last-ball finish",
   "big chase"), and an index over the player / team / pair feature tables, both searched with filters
   plus a TF-IDF and embedding blend.
@@ -117,7 +117,7 @@ CI (`.github/workflows/ci.yml`) runs lint and the test suite on every push.
 - Data, models, ratings, statistics, search, assistant, API and page are built and tested.
 - **Verified:** the full test suite, also passing in CI on GitHub (lint plus tests); a clean clone
   installing and building from scratch; the real server on real data under concurrent load; the page
-  in a real browser (progress, tool trace, access-token form, rate-limit message, phone layout).
+  in a real browser (progress, tool trace, access token form, rate limit message, phone layout).
 - **Not yet verified:** the assistant against the live model through the API (a scripted stand-in
   chose the tool calls) and the Docker image (not built: no Docker on the development machine). The
   last full live eval run was 27/28; the miss was a wording check, since fixed, and the five
